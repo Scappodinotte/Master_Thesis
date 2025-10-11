@@ -7,9 +7,9 @@
 # ------------------------------------------------------------------------------
 # Connecting GitHub
 # ------------------------------------------------------------------------------
-library(usethis)
-use_git()
-use_github()
+# library(usethis)
+# use_git()
+# use_github()
 
 # ------------------------------------------------------------------------------
 # Load packages and functions
@@ -401,14 +401,15 @@ price_df <- price_df %>%
 g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = as.factor(year))) +
   geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
   labs(
-    title = "Price Distribution across hours in 2023 and 2024",
+    title = "Price distribution across hours in 2023 and 2024",
     x = "Hours",
-    y = "Day-Ahead Electrictiy Price EUR/MWh",
+    y = "Day-Ahead electrictiy price EUR/MWh",
     fill = "Year"
   ) + theme_minimal() + 
-  theme(legend.position = c(0.1, 0.9))
+  theme(legend.position = c(0.1, 0.9), plot.title = element_text(hjust = 0.5), 
+        text = element_text(size=16,  family="serif"))
 g
-ggsave(filename = "price_distrib.pdf", path = outDir, width = 7)
+ggsave(filename = "price_distrib.pdf", path = outDir, width = 10)
 
 # Discussion: In 2024, the prices seems to be lower and less variable on average during the solar dome than 2023
 # Especially from 16 to 18, the opposite happens, prices are higher on average and more disperse
