@@ -7,9 +7,9 @@
 # ------------------------------------------------------------------------------
 # Connecting GitHub
 # ------------------------------------------------------------------------------
-library(usethis)
-use_git()
-use_github()
+# library(usethis)
+# use_git()
+# use_github()
 
 # ------------------------------------------------------------------------------
 # Load packages and functions
@@ -328,7 +328,7 @@ summary(price_drift)
 
 # Null:  TS has a unit root (non stationary, random walk)
 pp.test(price, type = "Z(t_alpha)")
-# Discussion: rejects the non-stationnarity. 
+# Discussion: rejects the non-stationarity. 
 
 # Conclusion: the ts is CSP 3/3
 
@@ -339,7 +339,13 @@ rm(price_drift, load_drift, wind_drift, sol_drift)
 # ------------------------------------------------------------------------------
 # Summary statistics
 # ------------------------------------------------------------------------------
+summary(solar)
 
+
+
+summary(wind)
+summary(load)
+summary(price)
 
 
 # ------------------------------------------------------------------------------
