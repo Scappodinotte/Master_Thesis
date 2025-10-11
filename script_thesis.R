@@ -7,9 +7,9 @@
 # ------------------------------------------------------------------------------
 # Connecting GitHub
 # ------------------------------------------------------------------------------
-# library(usethis)
+library(usethis)
 # use_git()
-# use_github()
+use_github()
 
 # ------------------------------------------------------------------------------
 # Load packages and functions
@@ -116,6 +116,9 @@ gen_df$Wind[gen_df$Wind == "N/A"] <- act_df$Wind.Onshore...Actual.Aggregated..MW
 
 rm(act_df)
 
+gen_df$Solar <- as.double(gen_df$Solar)
+gen_df$Wind <- as.double(gen_df$Wind)
+
 # ------------------------------------------------------------------------------
 # Transform in time series and plotting
 # ------------------------------------------------------------------------------
@@ -125,7 +128,7 @@ wind <- xts(as.double(gen_df$Wind), order.by = gen_df$DateTime)
 load <- xts(as.double(load_df$Load), order.by = load_df$DateTime)
 price <- xts(as.double(price_df$`Day-Ahead`), order.by = price_df$DateTime)
 
-rm(gen_df, load_df, price_df)
+# rm(gen_df, load_df, price_df)
 
 # Reduce to daily values
 
@@ -339,14 +342,78 @@ rm(price_drift, load_drift, wind_drift, sol_drift)
 # ------------------------------------------------------------------------------
 # Summary statistics
 # ------------------------------------------------------------------------------
-summary(solar)
+summary(gen_df$Solar)
+
+g <- ggplot(gen_df, aes(x = Solar)) +
+  geom_histogram(binwidth = 10, colour="black")
+g <- g + ggtitle("Solar production Estonia", subtitle = "Hours, not seasonally adjusted")
+g
+# Discussion: Right skewed distribution
+
+g <- ggplot(gen_df, aes(y = Solar)) + 
+  geom_boxplot() + 
+  scale_x_discrete() +
+  coord_flip() + 
+  labs(title = "Solar production Estonia")
+g
 
 
+summary(gen_df$Wind)
 
-summary(wind)
-summary(load)
-summary(price)
+g <- ggplot(gen_df, aes(x = Wind)) +
+  geom_histogram(binwidth = 10, colour="black")
+g <- g + ggtitle("Solar production Estonia", subtitle = "Hours, not seasonally adjusted")
+g
+# Discussion: Right skewed distribution
 
+
+summary(load_df$Load)
+
+g <- ggplot(load_df, aes(x = Load)) +
+  geom_histogram(binwidth = 10, colour="black")
+g <- g + ggtitle("Solar production Estonia", subtitle = "Hours, not seasonally adjusted")
+g
+# Discussion: Slightly right skewed
+
+jarque.bera.test(load_df$Load)
+# Reject normality
+
+
+summary(price_df$`Day-Ahead`)
+
+g <- ggplot(price_df, aes(x = `Day-Ahead`)) +
+  geom_histogram(binwidth = 10, colour="black")
+g <- g + ggtitle("Solar production Estonia", subtitle = "Hours, not seasonally adjusted")
+g
+# Discussion: Near normal distribution
+
+jarque.bera.test(price_df$`Day-Ahead`)
+# Reject normality
+
+# Distribution across hours
+
+price_df <- price_df %>%
+  mutate(
+    hour = hour(DateTime),
+    year = year(DateTime)
+  )
+
+g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = as.factor(year))) +
+  geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
+  labs(
+    title = "Price Distribution across hours in 2023 and 2024",
+    x = "Hours",
+    y = "Day-Ahead Electrictiy Price EUR/MWh",
+    fill = "Year"
+  ) + theme_minimal() + 
+  theme(legend.position = c(0.1, 0.9))
+g
+ggsave(filename = "price_distrib.pdf", path = outDir, width = 7)
+
+# Discussion: In 2024, the prices seems to be lower and less variable on average during the solar dome than 2023
+# Especially from 16 to 18, the opposite happens, prices are higher on average and more disperse
+# Especially during the night, prices seems similar, but variability increase in 2024
+# In addition, the positive outliers are mostly registered in 2024
 
 # ------------------------------------------------------------------------------
 # Appendix
