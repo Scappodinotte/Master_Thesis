@@ -27,6 +27,7 @@ library(dplyr)
 library(sandwich)
 library(tidyr)
 library(tseries)
+library(moments)
 
 # Delete all objects in the memory
 rm(list=ls())
@@ -343,35 +344,67 @@ rm(price_drift, load_drift, wind_drift, sol_drift)
 # Summary statistics
 # ------------------------------------------------------------------------------
 summary(gen_df$Solar)
+skewness(gen_df$Solar)
+kurtosis(gen_df$Solar)
 
 g <- ggplot(gen_df, aes(x = Solar)) +
-  geom_histogram(binwidth = 10, colour="black")
-g <- g + ggtitle("Solar production Estonia", subtitle = "Hours, not seasonally adjusted")
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 20, colour="black", fill = "white") + 
+  geom_density(alpha = .2, fill = "red") + 
+  geom_vline(aes(xintercept = mean(Solar),
+                 color = "Mean"), linetype = "dashed", linewidth = 1) + 
+  geom_vline(aes(xintercept = median(Solar),
+                 color = "Median"), linetype = "dashed", linewidth = 1) +
+  scale_color_manual(name = "Statistics", 
+                     values = c("Mean" = "blue", "Median" = "green")) +
+  ggtitle("Hourly solar production Estonia", subtitle = "In megawatts") + 
+  labs(x = "Solar power", y = "Density") +
+  theme(text = element_text(size = 16)) +
+  theme_minimal()
 g
 # Discussion: Right skewed distribution
 
-g <- ggplot(gen_df, aes(y = Solar)) + 
-  geom_boxplot() + 
-  scale_x_discrete() +
-  coord_flip() + 
-  labs(title = "Solar production Estonia")
-g
-
 
 summary(gen_df$Wind)
+skewness(gen_df$Wind)
+kurtosis(gen_df$Wind)
 
 g <- ggplot(gen_df, aes(x = Wind)) +
-  geom_histogram(binwidth = 10, colour="black")
-g <- g + ggtitle("Solar production Estonia", subtitle = "Hours, not seasonally adjusted")
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 20, colour="black", fill = "white") + 
+  geom_density(alpha = .2, fill = "red") + 
+  geom_vline(aes(xintercept = mean(Wind),
+                 color = "Mean"), linetype = "dashed", linewidth = 1) + 
+  geom_vline(aes(xintercept = median(Wind),
+                 color = "Median"), linetype = "dashed", linewidth = 1) +
+  scale_color_manual(name = "Statistics", 
+                     values = c("Mean" = "blue", "Median" = "green")) +
+  ggtitle("Hourly wind production Estonia", subtitle = "In megawatts") + 
+  labs(x = "Wind power", y = "Density") +
+  theme(text = element_text(size = 16)) +
+  theme_minimal()
 g
 # Discussion: Right skewed distribution
 
 
 summary(load_df$Load)
+skewness(load_df$Load)
+kurtosis(load_df$Load)
 
 g <- ggplot(load_df, aes(x = Load)) +
-  geom_histogram(binwidth = 10, colour="black")
-g <- g + ggtitle("Solar production Estonia", subtitle = "Hours, not seasonally adjusted")
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 50, colour="black", fill = "white") + 
+  geom_density(alpha = .2, fill = "red") + 
+  geom_vline(aes(xintercept = mean(Load),
+                 color = "Mean"), linetype = "dashed", linewidth = 1) + 
+  geom_vline(aes(xintercept = median(Load),
+                 color = "Median"), linetype = "dashed", linewidth = 1) +
+  scale_color_manual(name = "Statistics", 
+                     values = c("Mean" = "blue", "Median" = "green")) +
+  ggtitle("Hourly load Estonia", subtitle = "In megawatts") + 
+  labs(x = "Load", y = "Density") +
+  theme(text = element_text(size = 16)) +
+  theme_minimal()
 g
 # Discussion: Slightly right skewed
 
@@ -380,10 +413,23 @@ jarque.bera.test(load_df$Load)
 
 
 summary(price_df$`Day-Ahead`)
+skewness(price_df$`Day-Ahead`)
+kurtosis(price_df$`Day-Ahead`)
 
 g <- ggplot(price_df, aes(x = `Day-Ahead`)) +
-  geom_histogram(binwidth = 10, colour="black")
-g <- g + ggtitle("Solar production Estonia", subtitle = "Hours, not seasonally adjusted")
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 20, colour="black", fill = "white") + 
+  geom_density(alpha = .2, fill = "red") + 
+  geom_vline(aes(xintercept = mean(`Day-Ahead`),
+             color = "Mean"), linetype = "dashed", linewidth = 1) + 
+  geom_vline(aes(xintercept = median(`Day-Ahead`),
+             color = "Median"), linetype = "dashed", linewidth = 1) +
+  scale_color_manual(name = "Statistics", 
+                     values = c("Mean" = "blue", "Median" = "green")) +
+  ggtitle("Hourly day-ahead electricity price Estonia", subtitle = "In  euro per megawatt-hour") + 
+  labs(x = "Day-Ahead price", y = "Density") +
+  theme(text = element_text(size = 16)) +
+  theme_minimal()
 g
 # Discussion: Near normal distribution
 
@@ -406,8 +452,8 @@ g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = as.factor(ye
     y = "Day-Ahead electrictiy price EUR/MWh",
     fill = "Year"
   ) + theme_minimal() + 
-  theme(legend.position = c(0.1, 0.9), plot.title = element_text(hjust = 0.5), 
-        text = element_text(size=16,  family="serif"))
+  theme(legend.position.inside = c(0.1, 0.9), plot.title = element_text(hjust = 0.5), 
+        text = element_text(size=16,  family = "serif"))
 g
 ggsave(filename = "price_distrib.pdf", path = outDir, width = 10)
 
@@ -429,4 +475,9 @@ ggsave(filename = "price_distrib.pdf", path = outDir, width = 10)
 # summary(sol_trend)
 # # Discussion: the unit root is rejected at 1%
 
-
+# g <- ggplot(gen_df, aes(y = Solar)) + 
+#   geom_boxplot() + 
+#   scale_x_discrete() +
+#   coord_flip() + 
+#   labs(title = "Solar production Estonia")
+# g
