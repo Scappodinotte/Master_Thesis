@@ -8,7 +8,7 @@
 # Connecting GitHub
 # ------------------------------------------------------------------------------
 library(usethis)
-use_git()
+# use_git()
 use_github()
 
 # ------------------------------------------------------------------------------
@@ -16,7 +16,7 @@ use_github()
 # ------------------------------------------------------------------------------
 library(tsbox)
 library(xts)
-library(ggplot2)   
+library(ggplot2) #plot  
 library(seasonal)
 library(CADFtest)
 library(reshape2) 
@@ -27,7 +27,8 @@ library(dplyr)
 library(sandwich)
 library(tidyr)
 library(tseries)
-library(moments)
+library(moments) #kurtosis and skeweness
+library(xtable) #write latex table
 
 # Delete all objects in the memory
 rm(list=ls())
@@ -119,15 +120,54 @@ rm(act_df)
 
 gen_df$Solar <- as.double(gen_df$Solar)
 gen_df$Wind <- as.double(gen_df$Wind)
+load_df$Load <- as.double(load_df$Load)
+price_df$`Day-Ahead` <- as.double(price_df$`Day-Ahead`)
+
+# ------------------------------------------------------------------------------
+# Define panel
+# ------------------------------------------------------------------------------
+
+init_date <- price_df$DateTime[1]
+
+gen_df <- gen_df %>%
+  mutate(
+    hour = as.numeric(hour(DateTime)),
+    # day = day(DateTime),
+    day = as.numeric(floor(as.double(difftime(DateTime, init_date, units = "days") + 1)))
+  )
+
+write.csv(gen_df, file = "Data/gen_df.csv")
+
+
+load_df <- load_df %>%
+  mutate(
+    hour = as.character(hour(DateTime)),
+    # day = day(DateTime),
+    day = as.numeric(floor(as.double(difftime(DateTime, init_date, units = "days") + 1)))
+  )
+
+write.csv(load_df, file = "Data/load_df.csv")
+
+
+price_df <- price_df %>%
+  mutate(
+    hour = hour(DateTime),
+    year = year(DateTime),
+    # day = day(DateTime),
+    day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1))
+  )
+
+write.csv(price_df, file = "Data/price_df.csv")
+
 
 # ------------------------------------------------------------------------------
 # Transform in time series and plotting
 # ------------------------------------------------------------------------------
 
-solar <- xts(as.double(gen_df$Solar), order.by = gen_df$DateTime)
-wind <- xts(as.double(gen_df$Wind), order.by = gen_df$DateTime)
-load <- xts(as.double(load_df$Load), order.by = load_df$DateTime)
-price <- xts(as.double(price_df$`Day-Ahead`), order.by = price_df$DateTime)
+solar <- xts(gen_df$Solar, order.by = gen_df$DateTime)
+wind <- xts(gen_df$Wind, order.by = gen_df$DateTime)
+load <- xts(load_df$Load, order.by = load_df$DateTime)
+price <- xts(price_df$`Day-Ahead`, order.by = price_df$DateTime)
 
 # rm(gen_df, load_df, price_df)
 
@@ -157,77 +197,92 @@ price_m <- apply.monthly(price, mean)
 start <- as.POSIXct("2024-02-22 00:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
 end <- as.POSIXct("2024-03-02 23:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
 
-solar_p <- ts_span(solar, start, end)
-wind_p <- ts_span(wind, start, end)
-load_p <- ts_span(load, start, end)
-price_p <- ts_span(price, start, end)
+solar_r <- ts_span(solar, start, end)
+wind_r <- ts_span(wind, start, end)
+load_r <- ts_span(load, start, end)
+price_r <- ts_span(price, start, end)
 
 
 ts_plot(
-    solar_p,
-    title = "Hourly solar production Estonia",
+    solar_r,
+    title = "Hourly solar production",
     subtitle = "MW - No transformation"
 )
 ts_save(filename = paste(outDir, "/solar_week_feb.pdf", sep = ""), width = 8, height = 5, open = FALSE)
 
 ts_plot(
-  wind_p,
-  title = "Hourly wind production Estonia",
+  wind_r,
+  title = "Hourly wind production",
   subtitle = "MW - No transformation"
 )
 ts_save(filename = paste(outDir, "/wind_week_feb.pdf", sep = ""), width = 8, height = 5, open = FALSE)
 
 ts_plot(
-  load_p,
-  title = "Hourly load Estonia",
+  load_r,
+  title = "Hourly load",
   subtitle = "MW - No transformation"
 )
 ts_save(filename = paste(outDir, "/load_week_feb.pdf", sep = ""), width = 8, height = 5, open = FALSE)
 
 ts_plot(
-  price_p,
-  title = "Hourly day-ahead power price Estonia",
+  price_r,
+  title = "Hourly day-ahead power price",
   subtitle = "EUR/MWh - No transformation"
 )
 ts_save(filename = paste(outDir, "/price_week_feb.pdf", sep = ""), width = 8, height = 5, open = FALSE)
 
-rm(solar_p, wind_p, load_p, price_p)
+rm(solar_r, wind_r, load_r, price_r)
 
-# Reduce time span to 6 months
-start <- as.POSIXct("2023-01-01 00:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
-end <- as.POSIXct("2023-07-31 23:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+# Plotting entire ts
 
-solar_y <- ts_span(solar, start, end)
-wind_y <- ts_span(wind, start, end)
-load_y <- ts_span(load, start, end)
-price_y <- ts_span(price, start, end)
+g <- ggplot(gen_df, aes(x = DateTime, y = Solar)) + 
+  geom_line() +
+  labs(
+    title = "Hourly solar production [MW]",
+    y = "",
+    x = ""
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 16))
+g
+ggsave(filename = "Solar.pdf", path = outDir, width = 7)
 
+g <- ggplot(gen_df, aes(x = DateTime, y = Wind)) + 
+  geom_line() +
+  labs(
+    title = "Hourly wind production [MW]",
+    y = "",
+    x = ""
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 16))
+g
+ggsave(filename = "Wind.pdf", path = outDir, width = 7)
 
-ts_plot(
-  solar_y,
-  title = "Hourly solar production Estonia",
-  subtitle = "MW - No transformation"
-)
+g <- ggplot(load_df, aes(x = DateTime, y = Load)) + 
+  geom_line() +
+  labs(
+    title = "Hourly load [MW]",
+    y = "",
+    x = ""
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 16))
+g
+ggsave(filename = "Load.pdf", path = outDir, width = 7)
 
-ts_plot(
-  wind_y,
-  title = "Hourly wind production Estonia",
-  subtitle = "MW - No transformation"
-)
+g <- ggplot(price_df, aes(x = DateTime, y = `Day-Ahead`)) + 
+  geom_line() +
+  labs(
+    title = "Hourly day-ahead price [EUR/MWh]",
+    y = "",
+    x = ""
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 16))
+g
+ggsave(filename = "Price.pdf", path = outDir, width = 7)
 
-ts_plot(
-  load_y,
-  title = "Hourly load Estonia",
-  subtitle = "MW - No transformation"
-)
-
-ts_plot(
-  price_y,
-  title = "Hourly day-ahead power price Estonia",
-  subtitle = "EUR/MWh - No transformation"
-)
-
-rm(solar_y, wind_y, load_y, price_y)
 
 # Discussion: No trend
 
@@ -263,7 +318,7 @@ plotACF(price_m, lag.max = 24) # no more persistence! + evidence of some week au
 rm(solar_d, solar_w, solar_m, wind_d, wind_w, wind_m, 
    load_d, load_w, load_m, price_d, price_w, price_m)
 
-# KPSS Test, Phillips-Perron and ADF
+# KPSS Test, Phillips-Perron, ADF and IPS
 
 # Solar 
 
@@ -286,7 +341,7 @@ pp.test(solar, type = "Z(t_alpha)")
 # Wind 
 
 # Null: TS is mean stationary (CSP)
-kpss.test(wind, null = "Level")
+kpss <- kpss.test(wind, null = "Level")
 # Discussion: Reject the null at 1%, ts is not level stationary
 
 # Null: TS has a unit root (non stationary, random walk)
@@ -316,6 +371,10 @@ summary(load_drift)
 pp.test(load, type = "Z(t_alpha)")
 # Discussion: rejects the non-stationnarity. 
 
+# Null: pseries has a unit root
+cipstest(load_dfp$Load, type = "drift")
+
+
 # Conclusion: the ts is CSP 2/3
 
 
@@ -336,16 +395,35 @@ pp.test(price, type = "Z(t_alpha)")
 
 # Conclusion: the ts is CSP 3/3
 
-rm(price_drift, load_drift, wind_drift, sol_drift)
+# ------------------------------------------------------------------------------
+# Create latex table
+# ------------------------------------------------------------------------------
+t <- data.frame(c("Variable", "Solar", "Wind", "Load", "Price"),
+                c("t-statistic", sol_drift$statistic, wind_drift$statistic, load_drift$statistic, price_drift$statistic),
+                c("p-value", "<0.01", "<0.01", "<0.01", "<0.01"),
+                c("", "", "", "", ""),
+                c("t-statistic", sol_drift$statistic, wind_drift$statistic, load_drift$statistic, price_drift$statistic),
+                c("p-value", "<0.01", "<0.01", "<0.01", "<0.01")
+)
 
+names(t) <- c("", "ADF","" ,"" ,"IPS","")
+
+print(xtable(t, type = "latex"))
+
+rm(price_drift, load_drift, wind_drift, sol_drift)
 
 
 # ------------------------------------------------------------------------------
 # Summary statistics
 # ------------------------------------------------------------------------------
 summary(gen_df$Solar)
-skewness(gen_df$Solar)
-kurtosis(gen_df$Solar)
+mean_s <- mean(gen_df$Solar)
+median_s <- median(gen_df$Solar)
+min_s <- min(gen_df$Solar)
+max_s <- max(gen_df$Solar)
+sk_s <- skewness(gen_df$Solar)
+ku_s <- kurtosis(gen_df$Solar)
+sd_s <- sd(gen_df$Solar)
 
 g <- ggplot(gen_df, aes(x = Solar)) +
   geom_histogram(aes(y = after_stat(density)), 
@@ -357,17 +435,30 @@ g <- ggplot(gen_df, aes(x = Solar)) +
                  color = "Median"), linetype = "dashed", linewidth = 1) +
   scale_color_manual(name = "Statistics", 
                      values = c("Mean" = "blue", "Median" = "green")) +
-  ggtitle("Hourly solar production Estonia", subtitle = "In megawatts") + 
-  labs(x = "Solar power", y = "Density") +
-  theme(text = element_text(size = 16)) +
-  theme_minimal()
+  labs(title = "Hourly solar production",
+       subtitle = "In megawatts",
+       x = "Solar power",
+       y = "Density") +
+  theme_minimal() +
+  theme(
+    legend.position = c(0.8, 0.8),
+    text = element_text(size = 16))
 g
+ggsave(filename = "solar_distrib.pdf", path = outDir, width = 8)
 # Discussion: Right skewed distribution
+
+jarque.bera.test(gen_df$Solar)
+# Reject normality
 
 
 summary(gen_df$Wind)
-skewness(gen_df$Wind)
-kurtosis(gen_df$Wind)
+mean_w <- mean(gen_df$Wind)
+median_w <- median(gen_df$Wind)
+min_w <- min(gen_df$Wind)
+max_w <- max(gen_df$Wind)
+sk_w <- skewness(gen_df$Wind)
+ku_w <- kurtosis(gen_df$Wind)
+sd_w <- sd(gen_df$Wind)
 
 g <- ggplot(gen_df, aes(x = Wind)) +
   geom_histogram(aes(y = after_stat(density)), 
@@ -379,17 +470,30 @@ g <- ggplot(gen_df, aes(x = Wind)) +
                  color = "Median"), linetype = "dashed", linewidth = 1) +
   scale_color_manual(name = "Statistics", 
                      values = c("Mean" = "blue", "Median" = "green")) +
-  ggtitle("Hourly wind production Estonia", subtitle = "In megawatts") + 
-  labs(x = "Wind power", y = "Density") +
-  theme(text = element_text(size = 16)) +
-  theme_minimal()
+  labs(title = "Hourly wind production",
+       subtitle = "In megawatts", 
+       x = "Wind power", 
+       y = "Density") +
+  theme_minimal() +
+  theme(
+    legend.position = c(0.8, 0.8),
+    text = element_text(size = 16))
 g
+ggsave(filename = "wind_distrib.pdf", path = outDir, width = 8)
 # Discussion: Right skewed distribution
+
+jarque.bera.test(gen_df$Wind)
+# Reject normality
 
 
 summary(load_df$Load)
-skewness(load_df$Load)
-kurtosis(load_df$Load)
+mean_l <- mean(load_df$Load)
+median_l <- median(load_df$Load)
+min_l <- min(load_df$Load)
+max_l <- max(load_df$Load)
+sk_l <- skewness(load_df$Load)
+ku_l <- kurtosis(load_df$Load)
+sd_l <- sd(load_df$Load)
 
 g <- ggplot(load_df, aes(x = Load)) +
   geom_histogram(aes(y = after_stat(density)), 
@@ -401,11 +505,16 @@ g <- ggplot(load_df, aes(x = Load)) +
                  color = "Median"), linetype = "dashed", linewidth = 1) +
   scale_color_manual(name = "Statistics", 
                      values = c("Mean" = "blue", "Median" = "green")) +
-  ggtitle("Hourly load Estonia", subtitle = "In megawatts") + 
-  labs(x = "Load", y = "Density") +
-  theme(text = element_text(size = 16)) +
-  theme_minimal()
+  labs(title = "Hourly load", 
+       subtitle = "In megawatts", 
+       x = "Load", 
+       y = "Density") +
+  theme_minimal() + 
+  theme(
+    legend.position = c(0.8, 0.8),
+    text = element_text(size = 16))
 g
+ggsave(filename = "load_distrib.pdf", path = outDir, width = 8)
 # Discussion: Slightly right skewed
 
 jarque.bera.test(load_df$Load)
@@ -413,8 +522,13 @@ jarque.bera.test(load_df$Load)
 
 
 summary(price_df$`Day-Ahead`)
-skewness(price_df$`Day-Ahead`)
-kurtosis(price_df$`Day-Ahead`)
+mean_p <- mean(price_df$`Day-Ahead`)
+median_p <- median(price_df$`Day-Ahead`)
+min_p <- min(price_df$`Day-Ahead`)
+max_p <- max(price_df$`Day-Ahead`)
+sk_p <- skewness(price_df$`Day-Ahead`)
+ku_p <- kurtosis(price_df$`Day-Ahead`)
+sd_p <- sd(price_df$`Day-Ahead`)
 
 g <- ggplot(price_df, aes(x = `Day-Ahead`)) +
   geom_histogram(aes(y = after_stat(density)), 
@@ -426,41 +540,67 @@ g <- ggplot(price_df, aes(x = `Day-Ahead`)) +
              color = "Median"), linetype = "dashed", linewidth = 1) +
   scale_color_manual(name = "Statistics", 
                      values = c("Mean" = "blue", "Median" = "green")) +
-  ggtitle("Hourly day-ahead electricity price Estonia", subtitle = "In  euro per megawatt-hour") + 
-  labs(x = "Day-Ahead price", y = "Density") +
-  theme(text = element_text(size = 16)) +
-  theme_minimal()
+  labs(title = "Hourly day-ahead electricity price", 
+       subtitle = "In euro per megawatt-hour",
+       x = "Day-ahead price",
+       y = "Density") +
+  theme_minimal() +
+  theme(
+    legend.position = c(0.8, 0.8),
+    text = element_text(size = 16))
 g
+ggsave(filename = "price_distrib.pdf", path = outDir, width = 8)
 # Discussion: Near normal distribution
 
 jarque.bera.test(price_df$`Day-Ahead`)
 # Reject normality
 
-# Distribution across hours
 
-price_df <- price_df %>%
-  mutate(
-    hour = hour(DateTime),
-    year = year(DateTime)
-  )
+# Distribution across hours
 
 g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = as.factor(year))) +
   geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
   labs(
-    title = "Price distribution across hours in 2023 and 2024",
-    x = "Hours",
-    y = "Day-Ahead electrictiy price EUR/MWh",
+    title = "Day-ahead electrictiy price distribution across hours in 2023 and 2024",
+    subtitle = "In euro per megawatt-hour",
+    x = "Hour",
+    y = "Price",
     fill = "Year"
-  ) + theme_minimal() + 
-  theme(legend.position.inside = c(0.1, 0.9), plot.title = element_text(hjust = 0.5), 
-        text = element_text(size=16,  family = "serif"))
+  ) + 
+  theme_minimal() + 
+  theme(
+    legend.position = c(0.1, 0.9),
+    text = element_text(size = 16))
 g
-ggsave(filename = "price_distrib.pdf", path = outDir, width = 10)
+ggsave(filename = "price_distrib_hours.pdf", path = outDir, width = 10)
 
 # Discussion: In 2024, the prices seems to be lower and less variable on average during the solar dome than 2023
 # Especially from 16 to 18, the opposite happens, prices are higher on average and more disperse
 # Especially during the night, prices seems similar, but variability increase in 2024
 # In addition, the positive outliers are mostly registered in 2024
+
+# ------------------------------------------------------------------------------
+# Create latex table
+# ------------------------------------------------------------------------------
+t <- data.frame(c("Solar", "Wind", "Load", "Price"),
+                c(mean_s, mean_w, mean_l, mean_p),
+                c(median_s, median_w, median_l, median_p),
+                c(min_s, min_w, min_l, min_p),
+                c(max_s, max_w, max_l, max_p),
+                c(sd_s, sd_w, sd_l, sd_p),
+                c(sk_s, sk_w, sk_l, sk_p),
+                c(ku_s, ku_w, ku_l, ku_p),
+                c("<0.01", "<0.01", "<0.01", "<0.01")
+)
+
+names(t) <- c("Variable", "Mean", "Median", "Min", "Max", "Standard deviation", "Skewness", "Kurtosis", "JB test pvalue")
+
+t <- t %>%
+  mutate_if(is.numeric, ~ scales::number(., accuracy = 0.01))
+
+print(xtable(t, type = "latex"))
+
+
 
 # ------------------------------------------------------------------------------
 # Appendix
@@ -479,5 +619,15 @@ ggsave(filename = "price_distrib.pdf", path = outDir, width = 10)
 #   geom_boxplot() + 
 #   scale_x_discrete() +
 #   coord_flip() + 
-#   labs(title = "Solar production Estonia")
+#   labs(title = "Solar production")
 # g
+
+# # Reduce time span to 6 months
+# start <- as.POSIXct("2023-01-01 00:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+# end <- as.POSIXct("2023-07-31 23:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+# 
+# solar_y <- ts_span(solar, start, end)
+# wind_y <- ts_span(wind, start, end)
+# load_y <- ts_span(load, start, end)
+# price_y <- ts_span(price, start, end)
+# rm(solar_y, wind_y, load_y, price_y)
