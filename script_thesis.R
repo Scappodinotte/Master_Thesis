@@ -27,7 +27,7 @@ library(dplyr)
 library(sandwich)
 library(tidyr)
 library(tseries)
-library(moments) #kurtosis and skeweness
+library(moments) #kurtosis and skewness
 library(xtable) #write latex table
 
 # Delete all objects in the memory
@@ -159,7 +159,54 @@ price_df <- price_df %>%
 
 write.csv(price_df, file = "Data/price_df.csv")
 
-
+time <- data.frame(DateTime = gen_df$DateTime)
+time <- time %>%
+  mutate(
+    weekday = weekdays(as.POSIXct(DateTime, format = "%d-%m-%Y %H:%M:%S", tz = "UTC")),
+    h0 = as.numeric(hour(DateTime) == 0),
+    h1 = as.numeric(hour(DateTime) == 1),
+    h2 = as.numeric(hour(DateTime) == 2),
+    h3 = as.numeric(hour(DateTime) == 3),
+    h4 = as.numeric(hour(DateTime) == 4),
+    h5 = as.numeric(hour(DateTime) == 5),
+    h6 = as.numeric(hour(DateTime) == 6),
+    h7 = as.numeric(hour(DateTime) == 7),
+    h8 = as.numeric(hour(DateTime) == 8),
+    h9 = as.numeric(hour(DateTime) == 9),
+    h10 = as.numeric(hour(DateTime) == 10),
+    h11 = as.numeric(hour(DateTime) == 11),
+    h12 = as.numeric(hour(DateTime) == 12),
+    h13 = as.numeric(hour(DateTime) == 13),
+    h14 = as.numeric(hour(DateTime) == 14),
+    h15 = as.numeric(hour(DateTime) == 15),
+    h16 = as.numeric(hour(DateTime) == 16),
+    h17 = as.numeric(hour(DateTime) == 17),
+    h18 = as.numeric(hour(DateTime) == 18),
+    h19 = as.numeric(hour(DateTime) == 19),
+    h20 = as.numeric(hour(DateTime) == 20),
+    h21 = as.numeric(hour(DateTime) == 21),
+    h22 = as.numeric(hour(DateTime) == 22),
+    h23 = as.numeric(hour(DateTime) == 23),
+    mon = as.numeric(weekday == "Monday"),
+    tue = as.numeric(weekday == "Tuesday"),
+    wed = as.numeric(weekday == "Wednesday"),
+    thu = as.numeric(weekday == "Thursday"),
+    fri = as.numeric(weekday == "Friday"),
+    sat = as.numeric(weekday == "Saturday"),
+    sun = as.numeric(weekday == "Sunday"),
+    jan = as.numeric(month(DateTime) == 1),
+    feb = as.numeric(month(DateTime) == 2),
+    mar = as.numeric(month(DateTime) == 3),
+    apr = as.numeric(month(DateTime) == 4),
+    may = as.numeric(month(DateTime) == 5),
+    jun = as.numeric(month(DateTime) == 6),
+    jul = as.numeric(month(DateTime) == 7),
+    aug = as.numeric(month(DateTime) == 8),
+    sep = as.numeric(month(DateTime) == 9),
+    oct = as.numeric(month(DateTime) == 10),
+    nov = as.numeric(month(DateTime) == 11),
+    dec = as.numeric(month(DateTime) == 12)
+  )
 # ------------------------------------------------------------------------------
 # Transform in time series and plotting
 # ------------------------------------------------------------------------------
@@ -168,34 +215,34 @@ solar <- xts(gen_df$Solar, order.by = gen_df$DateTime)
 wind <- xts(gen_df$Wind, order.by = gen_df$DateTime)
 load <- xts(load_df$Load, order.by = load_df$DateTime)
 price <- xts(price_df$`Day-Ahead`, order.by = price_df$DateTime)
-
-# rm(gen_df, load_df, price_df)
-
-# Reduce to daily values
-
-solar_d <- apply.weekly(solar, sum)
-wind_d <- apply.weekly(wind, sum)
-load_d <- apply.weekly(load, sum)
-price_d <- apply.weekly(price, mean)
-
-# Reduce to weekly values
-
-solar_w <- apply.weekly(solar, sum)
-wind_w <- apply.weekly(wind, sum)
-load_w <- apply.weekly(load, sum)
-price_w <- apply.weekly(price, mean)
-
-# Reduce to monthly values
-
-solar_m <- apply.monthly(solar, sum)
-wind_m <- apply.monthly(wind, sum)
-load_m <- apply.monthly(load, sum)
-price_m <- apply.monthly(price, mean)
+# 
+# # rm(gen_df, load_df, price_df)
+# 
+# # Reduce to daily values
+# 
+# solar_d <- apply.weekly(solar, sum)
+# wind_d <- apply.weekly(wind, sum)
+# load_d <- apply.weekly(load, sum)
+# price_d <- apply.weekly(price, mean)
+# 
+# # Reduce to weekly values
+# 
+# solar_w <- apply.weekly(solar, sum)
+# wind_w <- apply.weekly(wind, sum)
+# load_w <- apply.weekly(load, sum)
+# price_w <- apply.weekly(price, mean)
+# 
+# # Reduce to monthly values
+# 
+# solar_m <- apply.monthly(solar, sum)
+# wind_m <- apply.monthly(wind, sum)
+# load_m <- apply.monthly(load, sum)
+# price_m <- apply.monthly(price, mean)
 
 
 # Reduce time span to one week where cable fault
-start <- as.POSIXct("2024-02-22 00:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
-end <- as.POSIXct("2024-03-02 23:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+start <- as.POSIXct("2024-01-22 00:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+end <- as.POSIXct("2024-02-02 23:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
 
 solar_r <- ts_span(solar, start, end)
 wind_r <- ts_span(wind, start, end)
@@ -290,33 +337,73 @@ ggsave(filename = "Price.pdf", path = outDir, width = 7)
 # Check stationary
 # ------------------------------------------------------------------------------
 
-plotACF(solar, lag.max = 30) # Short term seasonality (12h and 24) + low persistence
-plotACF(wind, lag.max = 30) # Trend/Persistence
-plotACF(load, lag.max = 30) # High trend/persistence + Short term seasonality (at 24)
-plotACF(price, lag.max = 30) # Short term seasonality (12h and 24) + medium persistence
+# plotACF(solar, lag.max = 30) # Short term seasonality (12h and 24) + low persistence
+# plotACF(wind, lag.max = 30) # Trend/Persistence
+# plotACF(load, lag.max = 30) # High trend/persistence + Short term seasonality (at 24)
+# plotACF(price, lag.max = 30) # Short term seasonality (12h and 24) + medium persistence
+# 
+# plotACF(solar_d, lag.max = 12) # No seasonality + just persistence
+# plotACF(wind_d, lag.max = 12) # No seasonality + just persistence
+# plotACF(load_d, lag.max = 12) # No seasonality + just persistence
+# plotACF(price_d, lag.max = 12) # Short term seasonality (5 days) + no persistence
+# 
+# plotACF(solar_w, lag.max = 30) # 6 month seasonality + persistence
+# plotACF(wind_w, lag.max = 30) # Low persistence + seasonality each 3 weeks
+# plotACF(load_w, lag.max = 30) # 6 month seasonality + persistence
+# plotACF(price_w, lag.max = 30) # no more persistence! + evidence of some week autocorrelation
+# 
+# plotACF(solar_m, lag.max = 24) # 6 month seasonality confirmed
+# plotACF(wind_m, lag.max = 24) # Stationary, seasonality and persistence no more present
+# plotACF(load_m, lag.max = 24) # 6 month seasonality confirmed + weak persistence
+# plotACF(price_m, lag.max = 24) # no more persistence! + evidence of some week autocorrelation
+# 
+# # Conclusion: 
+# # Short term seasonality at 12h and 24h for load, solar and price as expected
+# # Long term seasonality at 6 months for solar and load
+# # TS are highly persistent, like trend, include time running variable 
+# 
+# rm(solar_d, solar_w, solar_m, wind_d, wind_w, wind_m, 
+#    load_d, load_w, load_m, price_d, price_w, price_m)
 
-plotACF(solar_d, lag.max = 12) # No seasonality + just persistence
-plotACF(wind_d, lag.max = 12) # No seasonality + just persistence
-plotACF(load_d, lag.max = 12) # No seasonality + just persistence
-plotACF(price_d, lag.max = 12) # Short term seasonality (5 days) + no persistence
+model_p <- lm(price_df$`Day-Ahead` ~ h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
+                + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22 + h23
+              + mon + tue + thu + fri + sat + sun + jan + feb + mar + apr + may + jun + jul
+              + aug + sep + oct + nov, data = time)
 
-plotACF(solar_w, lag.max = 30) # 6 month seasonality + persistence
-plotACF(wind_w, lag.max = 30) # Low persistence + seasonality each 3 weeks
-plotACF(load_w, lag.max = 30) # 6 month seasonality + persistence
-plotACF(price_w, lag.max = 30) # no more persistence! + evidence of some week autocorrelation
+summary(model_p)
+res_p <- model_p$residuals
+price_drift <- CADFtest(res_p, max.lag.y = 24, type = "drift")
+summary(price_drift)
 
-plotACF(solar_m, lag.max = 24) # 6 month seasonality confirmed
-plotACF(wind_m, lag.max = 24) # Stationary, seasonality and persistence no more present
-plotACF(load_m, lag.max = 24) # 6 month seasonality confirmed + weak persistence
-plotACF(price_m, lag.max = 24) # no more persistence! + evidence of some week autocorrelation
+model_s <- lm(gen_df$Solar ~ h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
+              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22 + h23
+              + mon + tue + thu + fri + sat + sun + jan + feb + mar + apr + may + jun + jul
+              + aug + sep + oct + nov, data = time)
 
-# Conclusion: 
-# Short term seasonality at 12h and 24h for load, solar and price as expected
-# Long term seasonality at 6 months for solar and load
-# TS are highly persistent, like trend, include time running variable 
+summary(model_s)
+res_s <- model_s$residuals
+sol_drift <- CADFtest(res_s, max.lag.y = 24, type = "drift")
+summary(sol_drift)
 
-rm(solar_d, solar_w, solar_m, wind_d, wind_w, wind_m, 
-   load_d, load_w, load_m, price_d, price_w, price_m)
+model_w <- lm(gen_df$Wind ~ h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
+              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22 + h23
+              + mon + tue + thu + fri + sat + sun + jan + feb + mar + apr + may + jun + jul
+              + aug + sep + oct + nov, data = time)
+
+summary(model_w)
+res_w <- model_w$residuals
+wind_drift <- CADFtest(res_w, max.lag.y = 24, type = "drift")
+summary(wind_drift)
+
+model_l <- lm(load_df$Load ~ h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
+              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22 + h23
+              + mon + tue + thu + fri + sat + sun + jan + feb + mar + apr + may + jun + jul
+              + aug + sep + oct + nov, data = time)
+
+summary(model_l)
+res_l <- model_l$residuals
+load_drift <- CADFtest(res_l, max.lag.y = 24, type = "drift")
+summary(load_drift)
 
 # KPSS Test, Phillips-Perron, ADF and IPS
 
@@ -341,7 +428,7 @@ pp.test(solar, type = "Z(t_alpha)")
 # Wind 
 
 # Null: TS is mean stationary (CSP)
-kpss <- kpss.test(wind, null = "Level")
+kpss.test(wind, null = "Level")
 # Discussion: Reject the null at 1%, ts is not level stationary
 
 # Null: TS has a unit root (non stationary, random walk)
@@ -370,10 +457,6 @@ summary(load_drift)
 # Null:  TS has a unit root (non stationary, random walk)
 pp.test(load, type = "Z(t_alpha)")
 # Discussion: rejects the non-stationnarity. 
-
-# Null: pseries has a unit root
-cipstest(load_dfp$Load, type = "drift")
-
 
 # Conclusion: the ts is CSP 2/3
 
