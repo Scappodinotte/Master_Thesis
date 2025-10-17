@@ -71,6 +71,36 @@ estonia_h <- df_meteo %>%
   ) %>%
   arrange(DateTime)
 
+# Create time data frame to address seasonality
+init_date <- df_prod$DateTime[1]
+time <- data.frame(DateTime = df_prod$DateTime)
+time <- time %>%
+  mutate(
+    weekday = weekdays(as.POSIXct(DateTime, format = "%d-%m-%Y %H:%M:%S", tz = "UTC")),
+    mon = as.numeric(weekday == "Monday"),
+    tue = as.numeric(weekday == "Tuesday"),
+    wed = as.numeric(weekday == "Wednesday"),
+    thu = as.numeric(weekday == "Thursday"),
+    fri = as.numeric(weekday == "Friday"),
+    sat = as.numeric(weekday == "Saturday"),
+    sun = as.numeric(weekday == "Sunday"),
+    jan = as.numeric(month(DateTime) == 1),
+    feb = as.numeric(month(DateTime) == 2),
+    mar = as.numeric(month(DateTime) == 3),
+    apr = as.numeric(month(DateTime) == 4),
+    may = as.numeric(month(DateTime) == 5),
+    jun = as.numeric(month(DateTime) == 6),
+    jul = as.numeric(month(DateTime) == 7),
+    aug = as.numeric(month(DateTime) == 8),
+    sep = as.numeric(month(DateTime) == 9),
+    oct = as.numeric(month(DateTime) == 10),
+    nov = as.numeric(month(DateTime) == 11),
+    dec = as.numeric(month(DateTime) == 12),
+    run = floor(as.double(difftime(DateTime, init_date, units = "hour")))
+  )
+
+time <- tail(time, -1)
+
 # transform into time series
 solar_h <- xts(as.double(df_prod$Solar...Actual.Aggregated..MW.), order.by = df_prod$DateTime)
 wind_h <- xts(as.double(df_prod$Wind.Onshore...Actual.Aggregated..MW.), order.by = df_prod$DateTime)
@@ -125,12 +155,12 @@ cable <- data.frame(date = index(wind_d), cable = c(rep(1, 25), rep(0, 341)))
 # Plotting and data transformation
 # ------------------------------------------------------------------------------
 # Plotting the TS
-g <- ggplot(solar_d) + geom_line(aes(x = index(solar_d), y = solar_d)) + theme_minimal()
+g <- ggplot(ts_diff(log(solar_d))) + geom_line(aes(x = index(ts_diff(log(solar_d))), y = ts_diff(log(solar_d)))) + theme_minimal()
 g <- g + xlab("Days") + ylab("Megawatt [MW]") + ggtitle("actual solar production Estonia", subtitle = "Days, not seasonally adjusted")
 g
-# Discussion: Upper trend visually spotted
+# Discussion: 
 
-g <- ggplot(wind_d) + geom_line(aes(x = index(wind_d), y = wind_d)) + theme_minimal()
+g <- ggplot(ts_diff(log(wind_d))) + geom_line(aes(x = index(ts_diff(log(wind_d))), y = ts_diff(log(wind_d)))) + theme_minimal()
 g <- g + xlab("Days") + ylab("Megawatt [MW]") + ggtitle("actual wind production Estonia", subtitle = "Days, not seasonally adjusted")
 g
 # Discussion: No apparent trend visually spotted
@@ -156,88 +186,50 @@ g
 # Discussion: Upward trend visually spotted
 
 # Check AutoCorrelation Function
-plotACF(solar_d, lag.max = 20)
-plotACF(wind_d, lag.max = 20)
-plotACF(load_d, lag.max = 20)
-plotACF(irrad_d, lag.max = 20)
-plotACF(speed_d, lag.max = 20)
-plotACF(temp_d, lag.max = 20)
+plotACF(ts_diff(log(solar_d)), lag.max = 20)
+plotACF(ts_diff(log(wind_d)), lag.max = 20)
+plotACF(ts_diff(log(load_d)), lag.max = 20)
+plotACF(ts_diff(log(irrad_d)), lag.max = 20)
+plotACF(ts_diff(log(speed_d)), lag.max = 20)
+plotACF(ts_diff(log(temp_d)), lag.max = 20)
 
 # Discussion : Solar and irradiation show a small trend and seasonality each 6 days.
 # Wind has neither and load and temperature have small trend.
 
 # Check unit root process
-ur_sol_drift = CADFtest(solar_d, max.lag.y = 10, type = "drift", criterion = "BIC")
+ur_sol_drift = CADFtest(ts_diff(log(solar_d)), max.lag.y = 10, type = "drift", criterion = "BIC")
 summary(ur_sol_drift)
 # Discussion: the Non-stationnarity is rejected at 5% (p-value = 0.04)
 
-# ur_sol_trend = CADFtest(solar_d, max.lag.y = 10, type = "trend", criterion = "BIC")
-# summary(ur_sol_trend)
-# # Discussion: the Non-stationnarity is rejected at 5% (p-value = 0.00). Solar production seems to have a small trend
-
-ur_wind_drift = CADFtest(wind_d, max.lag.y = 10, type = "drift", criterion = "BIC")
+ur_wind_drift = CADFtest(ts_diff(log(wind_d)), max.lag.y = 10, type = "drift", criterion = "BIC")
 summary(ur_wind_drift)
 # Discussion: the TS is CSP
 
-
-ur_load_drift = CADFtest(load_d, max.lag.y = 10, type = "drift", criterion = "BIC")
+ur_load_drift = CADFtest(ts_diff(log(load_d)), max.lag.y = 10, type = "drift", criterion = "BIC")
 summary(ur_load_drift)
 # Discussion: the TS is not CSP
 
-# ur_load_trend = CADFtest(act_load_d, max.lag.y = 10, type = "trend", criterion = "BIC")
-# summary(ur_load_trend)
-# # Discussion: the TS is not trend CSP but better, so take log difference
-# 
-# ur_load_trend_1 = CADFtest(ts_diff(log(act_load_d)), max.lag.y = 10, type = "trend", criterion = "BIC")
-# summary(ur_load_trend_1)
-# # Discussion: the TS is now CSP
+ur_irrad_drift = CADFtest(ts_diff(log(irrad_d)), max.lag.y = 10, type = "drift", criterion = "BIC")
+summary(ur_irrad_drift)
+# Discussion: the TS is not CSP
 
-# ur_irrad_drift = CADFtest(irrad_d, max.lag.y = 10, type = "drift", criterion = "BIC")
-# summary(ur_irrad_drift)
-# # Discussion: the TS is not CSP
-
-ur_irrad_trend = CADFtest(irrad_d, max.lag.y = 10, type = "trend", criterion = "BIC")
-summary(ur_irrad_trend)
-# Discussion: the TS is trend CSP at 10% level
-
-ur_irrad_trend_1 = CADFtest(ts_diff(log(irrad_d)), max.lag.y = 10, type = "trend", criterion = "BIC")
-summary(ur_irrad_trend_1)
-# Discussion: the TS is now CSP
-
-ur_speed_drift = CADFtest(speed_d, max.lag.y = 10, type = "drift", criterion = "BIC")
+ur_speed_drift = CADFtest(ts_diff(log(speed_d)), max.lag.y = 10, type = "drift", criterion = "BIC")
 summary(ur_speed_drift)
 # Discussion: the TS is CSP
 
-ur_temp_trend = CADFtest(temp_d, max.lag.y = 10, type = "trend", criterion = "BIC")
+ur_temp_trend = CADFtest(ts_diff(log(temp_d)), max.lag.y = 10, type = "drift", criterion = "BIC")
 summary(ur_temp_trend)
 # Discussion: the TS is not trend CSP
 
-# ur_temp_trend_1 = CADFtest(ts_diff(log(temp_d)), max.lag.y = 10, type = "trend", criterion = "BIC")
-# summary(ur_temp_trend_1)
-# # Discussion: the TS is not trend CSP
-
-# Transformation
-# Load irrad and temp should be transformed into growth rate to remove the trend
-gr_load_d <- ts_diff(log(load_d))
-gr_solar_d <- ts_diff(log(solar_d))
-gr_irrad_d <- ts_diff(log(irrad_d))
-gr_temp_d <- ts_diff(log(temp_d))
-
 # Actual solar is trend stationary and Wind prod and speed are CSP
-
-# Check AutoCorrelation Function
-plotACF(gr_solar_d, lag.max = 35)
-plotACF(wind_d, lag.max = 35)
-plotACF(gr_load_d, lag.max = 35)
-plotACF(gr_irrad_d, lag.max = 35)
-plotACF(speed_d, lag.max = 35)
-plotACF(gr_temp_d, lag.max = 35)
 
 # ------------------------------------------------------------------------------
 # Regression wind - speed
 # ------------------------------------------------------------------------------
 # Daily data regression
-reg_wind <- lm(wind_d[,1] ~ speed_d[,1] + cable[,2])
+reg_wind <- lm(ts_diff(log(wind_d[,1])) ~ ts_diff(log(speed_d[,1])) + cable[,2] +
+                 mon + tue + thu + fri + sat + sun + jan + feb + mar + apr + may + jun + jul +
+                 aug + sep + oct + nov, data = time)
 summary(reg_wind)
 
 # Discussion : Cable effect seems relevant for wind power

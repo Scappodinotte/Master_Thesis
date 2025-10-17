@@ -7,9 +7,9 @@
 # ------------------------------------------------------------------------------
 # Connecting GitHub
 # ------------------------------------------------------------------------------
-library(usethis)
+# library(usethis)
 # use_git()
-use_github()
+# use_github()
 
 # ------------------------------------------------------------------------------
 # Load packages and functions
@@ -124,30 +124,25 @@ load_df$Load <- as.double(load_df$Load)
 price_df$`Day-Ahead` <- as.double(price_df$`Day-Ahead`)
 
 # ------------------------------------------------------------------------------
-# Define panel
+# Define variables for panel
 # ------------------------------------------------------------------------------
 
 init_date <- price_df$DateTime[1]
 
-gen_df <- gen_df %>%
-  mutate(
-    hour = as.numeric(hour(DateTime)),
-    # day = day(DateTime),
-    day = as.numeric(floor(as.double(difftime(DateTime, init_date, units = "days") + 1)))
-  )
-
-write.csv(gen_df, file = "Data/gen_df.csv")
-
-
-load_df <- load_df %>%
-  mutate(
-    hour = as.character(hour(DateTime)),
-    # day = day(DateTime),
-    day = as.numeric(floor(as.double(difftime(DateTime, init_date, units = "days") + 1)))
-  )
-
-write.csv(load_df, file = "Data/load_df.csv")
-
+# gen_df <- gen_df %>%
+#   mutate(
+#     # hour = as.numeric(hour(DateTime)),
+#     # day = day(DateTime),
+#     # day = as.numeric(floor(as.double(difftime(DateTime, init_date, units = "days") + 1))),
+#   )
+# 
+# 
+# load_df <- load_df %>%
+#   mutate(
+#     # hour = as.character(hour(DateTime)),
+#     # day = day(DateTime),
+#     # day = as.numeric(floor(as.double(difftime(DateTime, init_date, units = "days") + 1)))
+#   )
 
 price_df <- price_df %>%
   mutate(
@@ -156,8 +151,6 @@ price_df <- price_df %>%
     # day = day(DateTime),
     day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1))
   )
-
-write.csv(price_df, file = "Data/price_df.csv")
 
 time <- data.frame(DateTime = gen_df$DateTime)
 time <- time %>%
@@ -205,8 +198,10 @@ time <- time %>%
     sep = as.numeric(month(DateTime) == 9),
     oct = as.numeric(month(DateTime) == 10),
     nov = as.numeric(month(DateTime) == 11),
-    dec = as.numeric(month(DateTime) == 12)
+    dec = as.numeric(month(DateTime) == 12),
+    run = floor(as.double(difftime(DateTime, init_date, units = "hour")))
   )
+
 # ------------------------------------------------------------------------------
 # Transform in time series and plotting
 # ------------------------------------------------------------------------------
@@ -215,8 +210,6 @@ solar <- xts(gen_df$Solar, order.by = gen_df$DateTime)
 wind <- xts(gen_df$Wind, order.by = gen_df$DateTime)
 load <- xts(load_df$Load, order.by = load_df$DateTime)
 price <- xts(price_df$`Day-Ahead`, order.by = price_df$DateTime)
-# 
-# # rm(gen_df, load_df, price_df)
 # 
 # # Reduce to daily values
 # 
@@ -365,8 +358,8 @@ ggsave(filename = "Price.pdf", path = outDir, width = 7)
 # rm(solar_d, solar_w, solar_m, wind_d, wind_w, wind_m, 
 #    load_d, load_w, load_m, price_d, price_w, price_m)
 
-model_p <- lm(price_df$`Day-Ahead` ~ h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
-                + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22 + h23
+model_p <- lm(price_df$`Day-Ahead` ~ h0 + h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
+              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22
               + mon + tue + thu + fri + sat + sun + jan + feb + mar + apr + may + jun + jul
               + aug + sep + oct + nov, data = time)
 
@@ -374,9 +367,13 @@ summary(model_p)
 res_p <- model_p$residuals
 price_drift <- CADFtest(res_p, max.lag.y = 24, type = "drift")
 summary(price_drift)
+# checkresiduals(res_p)
+plotACF(price_df$`Day-Ahead`, lag.max = 40)
+plotACF(res_p, lag.max = 40)
 
-model_s <- lm(gen_df$Solar ~ h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
-              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22 + h23
+
+model_s <- lm(gen_df$Solar ~ h0 + h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
+              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22
               + mon + tue + thu + fri + sat + sun + jan + feb + mar + apr + may + jun + jul
               + aug + sep + oct + nov, data = time)
 
@@ -384,9 +381,13 @@ summary(model_s)
 res_s <- model_s$residuals
 sol_drift <- CADFtest(res_s, max.lag.y = 24, type = "drift")
 summary(sol_drift)
+# checkresiduals(res_s)
+plotACF(gen_df$Solar, lag.max = 40)
+plotACF(res_s, lag.max = 40)
 
-model_w <- lm(gen_df$Wind ~ h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
-              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22 + h23
+
+model_w <- lm(gen_df$Wind ~ h0 + h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
+              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22
               + mon + tue + thu + fri + sat + sun + jan + feb + mar + apr + may + jun + jul
               + aug + sep + oct + nov, data = time)
 
@@ -394,9 +395,13 @@ summary(model_w)
 res_w <- model_w$residuals
 wind_drift <- CADFtest(res_w, max.lag.y = 24, type = "drift")
 summary(wind_drift)
+# checkresiduals(res_w)
+plotACF(gen_df$Wind, lag.max = 40)
+plotACF(res_w, lag.max = 40)
 
-model_l <- lm(load_df$Load ~ h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
-              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22 + h23
+
+model_l <- lm(load_df$Load ~ h0 + h1 + h2 + h3 + h4 + h5 + h6 + h8 + h9 + h10 + h11 
+              + h12 + h13 + h14 + h15 + h16 + h17 + h18 + h19 + h20 + h21 + h22
               + mon + tue + thu + fri + sat + sun + jan + feb + mar + apr + may + jun + jul
               + aug + sep + oct + nov, data = time)
 
@@ -404,6 +409,26 @@ summary(model_l)
 res_l <- model_l$residuals
 load_drift <- CADFtest(res_l, max.lag.y = 24, type = "drift")
 summary(load_drift)
+# checkresiduals(res_l)
+plotACF(load_df$Load, lag.max = 40)
+plotACF(res_l, lag.max = 40)
+
+
+# ------------------------------------------------------------------------------
+# Create STATA dataset
+# ------------------------------------------------------------------------------
+ 
+
+stata_df <- data.frame(hour = price_df$hour,
+                       day = price_df$day,
+                       solar = gen_df$Solar,
+                       wind = gen_df$Wind,
+                       load = load_df$Load,
+                       price = price_df$`Day-Ahead`)
+
+write.csv(stata_df, file = "Data/Stata_df.csv")
+
+
 
 # KPSS Test, Phillips-Perron, ADF and IPS
 
@@ -482,14 +507,15 @@ pp.test(price, type = "Z(t_alpha)")
 # Create latex table
 # ------------------------------------------------------------------------------
 t <- data.frame(c("Variable", "Solar", "Wind", "Load", "Price"),
-                c("t-statistic", sol_drift$statistic, wind_drift$statistic, load_drift$statistic, price_drift$statistic),
+                c("t-statistic", round(sol_drift$statistic, 2), round(wind_drift$statistic, 2),
+                  round(load_drift$statistic, 2), round(price_drift$statistic, 2)),
                 c("p-value", "<0.01", "<0.01", "<0.01", "<0.01"),
                 c("", "", "", "", ""),
-                c("t-statistic", sol_drift$statistic, wind_drift$statistic, load_drift$statistic, price_drift$statistic),
+                c("t-statistic", "-22.55", "-23.69", "-23.69" , "-23.69"),
                 c("p-value", "<0.01", "<0.01", "<0.01", "<0.01")
 )
 
-names(t) <- c("", "ADF","" ,"" ,"IPS","")
+names(t) <- c("", "CADF","" ,"" ,"PCADF","")
 
 print(xtable(t, type = "latex"))
 
