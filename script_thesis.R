@@ -93,8 +93,8 @@ gen_df <- gen_df %>%
 names(gen_df) <- c("DateTime", "Solar", "Wind")
 
 load_df <- load_df %>%
-  select(-c(Time..UTC., Actual.Total.Load..MW....BZN.EE))
-names(load_df) <- c("DateTime", "Load")
+  select(-(Time..UTC.))
+names(load_df) <- c("DateTime", "Load", "Act_load")
 
 price_df <- price_df %>%
   select(-c(MTU..UTC., Area, Sequence, Intraday.Period..UTC., Intraday.Price..EUR.MWh.))
@@ -132,7 +132,36 @@ rm(act_df)
 gen_df$Solar <- as.double(gen_df$Solar)
 gen_df$Wind <- as.double(gen_df$Wind)
 load_df$Load <- as.double(load_df$Load)
+load_df$Act_load <- as.double(load_df$Act_load)
 price_df$`Day-Ahead` <- as.double(price_df$`Day-Ahead`)
+
+
+# ------------------------------------------------------------------------------
+# Replace load errors 
+# ------------------------------------------------------------------------------
+
+
+load_df <- load_df %>%
+  mutate(
+    new_load = if_else(
+      between(DateTime, ymd_hms("2023-03-12 23:00:00"), ymd_hms("2023-03-13 22:00:00")) |
+        between(DateTime, ymd_hms("2023-11-04 22:00:00"), ymd_hms("2023-11-05 22:00:00")) |
+        between(DateTime, ymd_hms("2024-04-06 22:00:00"), ymd_hms("2024-04-07 21:00:00")) |
+        between(DateTime, ymd_hms("2024-06-26 22:00:00"), ymd_hms("2024-06-27 21:00:00")),
+      Act_load,
+      Load
+    )
+  )
+
+g <- ggplot(load_df, aes(x = DateTime, y = Load)) + 
+  geom_line(colour = "blue") +
+  geom_line(aes(x = DateTime, y = new_load), colour = "red", alpha = 0.5) +
+  theme_minimal()
+g
+
+load_df <- load_df %>%
+  select(-c(2, 3))
+names(load_df) <- c("DateTime", "Load")
 
 
 # ------------------------------------------------------------------------------
@@ -145,7 +174,7 @@ init_date <- price_df$DateTime[1]
 price_df <- price_df %>%
   mutate(
     hour = hour(DateTime),
-    year = year(DateTime),
+    after = as.numeric(DateTime >= as.POSIXct("25-01-2024 22:10:00", format = "%d-%m-%Y %H:%M:%S", tz = "UTC")),
     # day = day(DateTime),
     day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1))
   )
@@ -588,7 +617,7 @@ g <- ggplot(gen_df, aes(x = Solar)) +
   theme_minimal() +
   theme(
     legend.position = c(0.8, 0.8),
-    text = element_text(size = 16))
+    text = element_text(size = 14))
 g
 ggsave(filename = "solar_distrib.pdf", path = outDir, width = 8)
 # Discussion: Right skewed distribution
@@ -625,7 +654,7 @@ g <- ggplot(gen_df, aes(x = Wind)) +
   theme_minimal() +
   theme(
     legend.position = c(0.8, 0.8),
-    text = element_text(size = 16))
+    text = element_text(size = 14))
 g
 ggsave(filename = "wind_distrib.pdf", path = outDir, width = 8)
 # Discussion: Right skewed distribution
@@ -662,7 +691,7 @@ g <- ggplot(load_df, aes(x = Load)) +
   theme_minimal() + 
   theme(
     legend.position = c(0.8, 0.8),
-    text = element_text(size = 16))
+    text = element_text(size = 14))
 g
 ggsave(filename = "load_distrib.pdf", path = outDir, width = 8)
 # Discussion: Slightly right skewed
@@ -692,14 +721,15 @@ g <- ggplot(price_df, aes(x = `Day-Ahead`)) +
                  color = "Median"), linetype = "dashed", linewidth = 1) +
   scale_color_manual(name = "Statistics", 
                      values = c("Mean" = "blue", "Median" = "green")) +
+  xlim(-70, 500) +
   labs(title = "Hourly day-ahead electricity price", 
-       subtitle = "In euro per megawatt-hour",
+       subtitle = "In euro per megawatt-hour - x axis truncated for visibility purpose",
        x = "Day-ahead price",
        y = "Density") +
   theme_minimal() +
   theme(
     legend.position = c(0.8, 0.8),
-    text = element_text(size = 16))
+    text = element_text(size = 14))
 g
 ggsave(filename = "price_distrib.pdf", path = outDir, width = 8)
 # Discussion: Near normal distribution
@@ -710,21 +740,22 @@ jarque.bera.test(price_df$`Day-Ahead`)
 
 # Distribution across hours
 
-g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = as.factor(year))) +
+g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = as.factor(after))) +
   geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
   labs(
-    title = "Day-ahead electrictiy price distribution across hours in 2023 and 2024",
-    subtitle = "In euro per megawatt-hour",
+    title = "Day-ahead price distribution across hours - before and after cable fault",
+    subtitle = "In euro per megawatt-hour - y axis truncated for visibility purpose",
     x = "Hour",
     y = "Price",
-    fill = "Year"
+    fill = "Est-link 2 fault"
   ) + 
+  ylim(-70, 600) +
   theme_minimal() + 
   theme(
-    legend.position = c(0.1, 0.9),
-    text = element_text(size = 16))
+    legend.position = c(0.9, 0.9),
+    text = element_text(size = 14))
 g
-ggsave(filename = "price_distrib_hours.pdf", path = outDir, width = 10)
+ggsave(filename = "price_distrib_hours.pdf", path = outDir, width = 9)
 
 # Discussion: In 2024, the prices seems to be lower and less variable on average during the solar dome than 2023
 # Especially from 16 to 18, the opposite happens, prices are higher on average and more disperse
