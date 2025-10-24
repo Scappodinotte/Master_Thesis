@@ -10,7 +10,7 @@
 
 
 library(usethis)
-# use_git()
+use_git()
 # use_github()
 
 
@@ -182,7 +182,18 @@ price_df <- price_df %>%
 time <- data.frame(DateTime = gen_df$DateTime)
 time <- time %>%
   mutate(
-    weekday = weekdays(as.POSIXct(DateTime, format = "%d-%m-%Y %H:%M:%S", tz = "UTC")),
+    weekday = weekdays(as.POSIXct(DateTime, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")),
+    hol = as.numeric(date(DateTime) == "2023-02-24" |
+                       date(DateTime) == "2023-04-07" |
+                       date(DateTime) == "2023-05-01" |
+                       date(DateTime) == "2023-06-23" |
+                       date(DateTime) == "2023-12-25" |
+                       date(DateTime) == "2023-12-26" |
+                       date(DateTime) == "2024-01-01" |
+                       date(DateTime) == "2024-03-29" |
+                       date(DateTime) == "2024-05-01" |
+                       date(DateTime) == "2024-06-24" |
+                       date(DateTime) == "2024-08-20" ),
     h0 = as.numeric(hour(DateTime) == 0),
     h1 = as.numeric(hour(DateTime) == 1),
     h2 = as.numeric(hour(DateTime) == 2),
