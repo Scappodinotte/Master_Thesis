@@ -273,7 +273,6 @@ stata_df <- data.frame(hour = price_df$hour,
                        oct = time$oct,
                        nov = time$nov,
                        dec = time$dec
-                       
 )
 
 write.csv(stata_df, file = "Data/Stata_df.csv")
