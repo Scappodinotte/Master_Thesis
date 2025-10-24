@@ -10,7 +10,7 @@
 
 
 library(usethis)
-use_git()
+# use_git()
 # use_github()
 
 
@@ -174,9 +174,10 @@ init_date <- price_df$DateTime[1]
 price_df <- price_df %>%
   mutate(
     hour = hour(DateTime),
-    after = as.numeric(DateTime >= as.POSIXct("25-01-2024 22:10:00", format = "%d-%m-%Y %H:%M:%S", tz = "UTC")),
+    after = as.numeric(DateTime >= as.POSIXct("2024-01-25 22:10:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")),
     # day = day(DateTime),
-    day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1))
+    day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1)),
+    cable = 1 - as.numeric(between(DateTime, ymd_hms("2024-01-25 22:10:00"), ymd_hms("2024-09-04 00:00:00")))
   )
 
 time <- data.frame(DateTime = gen_df$DateTime)
@@ -250,7 +251,30 @@ stata_df <- data.frame(hour = price_df$hour,
                        solar = gen_df$Solar,
                        wind = gen_df$Wind,
                        load = load_df$Load,
-                       price = price_df$`Day-Ahead`)
+                       cable = price_df$cable,
+                       price = price_df$`Day-Ahead`,
+                       holyday = time$hol,
+                       mon = time$mon,
+                       tue = time$tue,
+                       wed = time$wed,
+                       thu = time$thu,
+                       fri = time$fri,
+                       sat = time$sat,
+                       sun = time$sun,
+                       jan = time$jan,
+                       feb = time$feb,
+                       mar = time$mar,
+                       apr = time$apr,
+                       may = time$may,
+                       jun = time$jun,
+                       jul = time$jul,
+                       aug = time$aug,
+                       sep = time$sep,
+                       oct = time$oct,
+                       nov = time$nov,
+                       dec = time$dec
+                       
+)
 
 write.csv(stata_df, file = "Data/Stata_df.csv")
 
