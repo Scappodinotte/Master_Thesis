@@ -253,7 +253,7 @@ stata_df <- data.frame(hour = price_df$hour,
                        load = load_df$Load,
                        cable = price_df$cable,
                        price = price_df$`Day-Ahead`,
-                       holyday = time$hol,
+                       holiday = time$hol,
                        mon = time$mon,
                        tue = time$tue,
                        wed = time$wed,
@@ -275,7 +275,7 @@ stata_df <- data.frame(hour = price_df$hour,
                        dec = time$dec
 )
 
-write.csv(stata_df, file = "Data/Stata_df.csv")
+write.csv(stata_df, file = "Data/Stata_df.csv", row.names = F)
 
 rm(stata_df)
 
