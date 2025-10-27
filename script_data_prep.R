@@ -67,11 +67,12 @@ load_24 <- read.csv("Data/Total Load - Day Ahead _ Actual_202401010000-202501010
 load_df <- rbind(load_23, load_24)
 rm(load_23, load_24)
 
+price_22 <- read.csv("Data/GUI_ENERGY_PRICES_202212310000-202301010000.csv", header = T, sep = ",")
 price_23 <- read.csv("Data/GUI_ENERGY_PRICES_202301010000-202401010000.csv", header = T, sep = ",")
 price_24 <- read.csv("Data/GUI_ENERGY_PRICES_202401010000-202501010000.csv", header = T, sep = ",")
 
-price_df <- rbind(price_23, price_24)
-rm(price_23, price_24)
+price_df <- rbind(price_22, price_23, price_24)
+rm(price_22, price_23, price_24)
 
 # Change time format
 gen_df$DateTime <- as.POSIXct(gen_df$DateTime, format = "%d.%m.%Y %H:%M", tz = "UTC")
@@ -169,16 +170,23 @@ names(load_df) <- c("DateTime", "Load")
 # ------------------------------------------------------------------------------
 
 
-init_date <- price_df$DateTime[1]
+init_date <- as.POSIXct("2023-01-01 00:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
 
 price_df <- price_df %>%
   mutate(
     hour = hour(DateTime),
     after = as.numeric(DateTime >= as.POSIXct("2024-01-25 22:10:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")),
-    # day = day(DateTime),
     day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1)),
     cable = 1 - as.numeric(between(DateTime, ymd_hms("2024-01-25 22:10:00"), ymd_hms("2024-09-04 00:00:00")))
   )
+
+# Create lagged price
+price_df <- price_df %>%
+  group_by(as.double(hour)) %>%
+  mutate(lag_p = lag(`Day-Ahead`, order_by = day)) %>%
+  arrange(DateTime) %>%
+  filter(DateTime >= init_date)
+
 
 time <- data.frame(DateTime = gen_df$DateTime)
 time <- time %>%
