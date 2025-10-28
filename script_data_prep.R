@@ -101,16 +101,6 @@ price_df <- price_df %>%
   select(-c(MTU..UTC., Area, Sequence, Intraday.Period..UTC., Intraday.Price..EUR.MWh.))
 names(price_df) <- c("DateTime", "Day-Ahead")
 
-# Reduce time span
-gen_df <- gen_df %>%
-  filter(DateTime < as.POSIXct("2024-12-01 00:00:00", format = "%Y-%m-%d %H:%M", tz = "UTC"))
-
-load_df <- load_df %>%
-  filter(DateTime < as.POSIXct("2024-12-01 00:00:00", format = "%Y-%m-%d %H:%M", tz = "UTC"))
-
-price_df <- price_df %>%
-  filter(DateTime < as.POSIXct("2024-12-01 00:00:00", format = "%Y-%m-%d %H:%M", tz = "UTC"))
-
 
 # ------------------------------------------------------------------------------
 # Check NAs and treat them
@@ -148,7 +138,12 @@ load_df <- load_df %>%
       between(DateTime, ymd_hms("2023-03-12 23:00:00"), ymd_hms("2023-03-13 22:00:00")) |
         between(DateTime, ymd_hms("2023-11-04 22:00:00"), ymd_hms("2023-11-05 22:00:00")) |
         between(DateTime, ymd_hms("2024-04-06 22:00:00"), ymd_hms("2024-04-07 21:00:00")) |
-        between(DateTime, ymd_hms("2024-06-26 22:00:00"), ymd_hms("2024-06-27 21:00:00")),
+        between(DateTime, ymd_hms("2024-06-26 22:00:00"), ymd_hms("2024-06-27 21:00:00")) |
+        between(DateTime, ymd_hms("2024-12-20 23:00:00"), ymd_hms("2024-12-22 21:00:00")) |
+        DateTime == ymd_hms("2024-12-30 07:00:00") |
+        DateTime == ymd_hms("2024-12-30 09:00:00") |
+        DateTime == ymd_hms("2024-12-30 11:00:00") |
+        DateTime == ymd_hms("2024-12-30 12:00:00"),
       Act_load,
       Load
     )
@@ -175,19 +170,19 @@ init_date <- as.POSIXct("2023-01-01 00:00:00", format = "%Y-%m-%d %H:%M:%S", tz 
 price_df <- price_df %>%
   mutate(
     hour = hour(DateTime),
-    after = as.numeric(DateTime >= as.POSIXct("2024-01-25 22:10:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")),
     day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1)),
-    cable = 1 - as.numeric(between(DateTime, ymd_hms("2024-01-25 22:10:00"), ymd_hms("2024-09-04 00:00:00")))
+    cable = 1 - as.numeric(between(DateTime, ymd_hms("2024-01-25 22:10:00"), ymd_hms("2024-09-04 00:00:00")) |
+                           between(DateTime, ymd_hms("2024-12-25 13:00:00"), ymd_hms("2024-12-31 23:00:00")))
   )
 
 # Create lagged price
 price_df <- price_df %>%
-  group_by(as.double(hour)) %>%
+  group_by(hour) %>%
   mutate(lag_p = lag(`Day-Ahead`, order_by = day)) %>%
   arrange(DateTime) %>%
   filter(DateTime >= init_date)
 
-
+# Create time for seasonality control
 time <- data.frame(DateTime = gen_df$DateTime)
 time <- time %>%
   mutate(
@@ -250,7 +245,7 @@ time <- time %>%
 
 
 # ------------------------------------------------------------------------------
-# Create STATA dataset for panel analysis
+# Create STATA data set 
 # ------------------------------------------------------------------------------
 
 
@@ -261,6 +256,7 @@ stata_df <- data.frame(hour = price_df$hour,
                        load = load_df$Load,
                        cable = price_df$cable,
                        price = price_df$`Day-Ahead`,
+                       lag_p = price_df$lag_p,
                        holiday = time$hol,
                        mon = time$mon,
                        tue = time$tue,
@@ -287,56 +283,6 @@ write.csv(stata_df, file = "Data/Stata_df.csv", row.names = F)
 
 rm(stata_df)
 
-# ------------------------------------------------------------------------------
-# Transform in time series and plotting
-# ------------------------------------------------------------------------------
-
-
-solar <- xts(gen_df$Solar, order.by = gen_df$DateTime)
-wind <- xts(gen_df$Wind, order.by = gen_df$DateTime)
-load <- xts(load_df$Load, order.by = load_df$DateTime)
-price <- xts(price_df$`Day-Ahead`, order.by = price_df$DateTime)
-
-# Reduce time span to one week where cable fault
-start <- as.POSIXct("2024-01-22 00:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
-end <- as.POSIXct("2024-02-02 23:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
-
-solar <- ts_span(solar, start, end)
-wind <- ts_span(wind, start, end)
-load <- ts_span(load, start, end)
-price <- ts_span(price, start, end)
-
-
-ts_plot(
-  solar,
-  title = "Hourly solar production",
-  subtitle = "MW - No transformation"
-)
-ts_save(filename = paste(outDir, "/solar_week_feb.pdf", sep = ""), width = 8, height = 5, open = FALSE)
-
-ts_plot(
-  wind,
-  title = "Hourly wind production",
-  subtitle = "MW - No transformation"
-)
-ts_save(filename = paste(outDir, "/wind_week_feb.pdf", sep = ""), width = 8, height = 5, open = FALSE)
-
-ts_plot(
-  load,
-  title = "Hourly load",
-  subtitle = "MW - No transformation"
-)
-ts_save(filename = paste(outDir, "/load_week_feb.pdf", sep = ""), width = 8, height = 5, open = FALSE)
-
-ts_plot(
-  price,
-  title = "Hourly day-ahead power price",
-  subtitle = "EUR/MWh - No transformation"
-)
-ts_save(filename = paste(outDir, "/price_week_feb.pdf", sep = ""), width = 8, height = 5, open = FALSE)
-
-rm(solar, wind, load, price)
-
 
 # ------------------------------------------------------------------------------
 # Plotting entire ts
@@ -350,6 +296,7 @@ g <- ggplot(gen_df, aes(x = DateTime, y = Solar)) +
     y = "",
     x = ""
   ) +
+  scale_x_date(expand = expansion(add = c(0, 50))) +
   theme_minimal() +
   theme(text = element_text(size = 16))
 g
@@ -362,6 +309,7 @@ g <- ggplot(gen_df, aes(x = DateTime, y = Wind)) +
     y = "",
     x = ""
   ) +
+  scale_x_date(expand = expansion(add = c(0, 50))) +
   theme_minimal() +
   theme(text = element_text(size = 16))
 g
@@ -374,6 +322,7 @@ g <- ggplot(load_df, aes(x = DateTime, y = Load)) +
     y = "",
     x = ""
   ) +
+  scale_x_date(expand = expansion(add = c(0, 50))) +
   theme_minimal() +
   theme(text = element_text(size = 16))
 g
@@ -386,15 +335,13 @@ g <- ggplot(price_df, aes(x = DateTime, y = `Day-Ahead`)) +
     y = "",
     x = ""
   ) +
+  ylim(-70, 1000) +
+  scale_x_date(expand = expansion(add = c(0, 50))) +
   theme_minimal() +
   theme(text = element_text(size = 16))
 g
 ggsave(filename = "Price.pdf", path = outDir, width = 7)
 
-
-# Discussion: No trend
-
-rm(g)
 
 # ------------------------------------------------------------------------------
 # Check stationarity and seasonality
@@ -779,26 +726,6 @@ ggsave(filename = "price_distrib.pdf", path = outDir, width = 8)
 jarque.bera.test(price_df$`Day-Ahead`)
 # Reject normality
 
-
-# Distribution across hours
-
-g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = as.factor(after))) +
-  geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
-  labs(
-    title = "Day-ahead price distribution across hours - before and after cable fault",
-    subtitle = "In euro per megawatt-hour - y axis truncated for visibility purpose",
-    x = "Hour",
-    y = "Price",
-    fill = "Est-link 2 fault"
-  ) + 
-  ylim(-70, 600) +
-  theme_minimal() + 
-  theme(
-    legend.position = c(0.9, 0.9),
-    text = element_text(size = 14))
-g
-ggsave(filename = "price_distrib_hours.pdf", path = outDir, width = 9)
-
 # Discussion: In 2024, the prices seems to be lower and less variable on average during the solar dome than 2023
 # Especially from 16 to 18, the opposite happens, prices are higher on average and more disperse
 # Especially during the night, prices seems similar, but variability increase in 2024
@@ -830,6 +757,28 @@ print(xtable(t, type = "latex"))
 
 
 
+# ------------------------------------------------------------------------------
+# Distribution across hours
+# ------------------------------------------------------------------------------
+
+
+g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = factor(cable))) +
+  geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
+  labs(
+    title = "Day-ahead price distribution across hours - before and after cable fault",
+    subtitle = "In euro per megawatt-hour - y axis truncated for visibility purpose",
+    x = "Hour",
+    y = "Price",
+    fill = "Est-link 2 fault"
+  ) + 
+  ylim(-70, 600) +
+  coord_cartesian(clip = "off") +
+  theme_minimal() + 
+  theme(
+    legend.position = c(0.9, 0.9),
+    text = element_text(size = 14))
+g
+ggsave(filename = "price_distrib_hours.pdf", path = outDir, width = 9)
 
 
 # ------------------------------------------------------------------------------

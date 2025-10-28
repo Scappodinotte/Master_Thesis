@@ -31,19 +31,19 @@ set seed 123
 import delimited Stata_df.csv
 save data, replace
 
+sort hour day
+
+by hour: gen lag_p = price[_n-1]
 
 * ------------------------------------------------------------------------------
 * Specify cross sectional and time dimension
 * ------------------------------------------------------------------------------
 xtset hour day
 
-
 * ------------------------------------------------------------------------------
-* Summarise variables and create one-day-lagged price 
+* Summarise variables
 * ------------------------------------------------------------------------------
 xtsum solar wind load price cable
-by hour gen lag_p = price[_n-1]
-
 
 * ------------------------------------------------------------------------------
 * Panel unit root test
@@ -71,7 +71,7 @@ xtset hour
 * apply plain MM-QR
 * ------------------------------------------------------------------------------
 * gives location and scale but no bootstrap and clustered se
-xtqreg price solar wind load cable holiday mon tue thu fri sat sun jan feb mar may jun jul aug sep oct nov dec, ls q(0.1)
+xtqreg price solar wind load cable holiday mon tue thu fri sat sun jan feb mar may jun jul aug sep oct nov dec lag_p, ls q(0.1)
 
 
 * ------------------------------------------------------------------------------
