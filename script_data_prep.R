@@ -187,7 +187,8 @@ price_df <- price_df %>%
     day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1)),
     cable = 1 - as.numeric(between(DateTime, ymd_hms("2024-01-25 22:10:00"), ymd_hms("2024-09-04 00:00:00")) |
                            between(DateTime, ymd_hms("2024-12-25 13:00:00"), ymd_hms("2024-12-31 23:00:00"))),
-    pskov = 1 - as.numeric(DateTime >= ymd_hms("2024-07-18 10:15:00"))
+    cable_pla = 1 - as.numeric(between(DateTime, ymd_hms("2023-08-01 00:00:00"), ymd_hms("2024-03-31 23:00:00"))),
+    pskov = 1 - as.numeric(DateTime >= ymd_hms("2024-07-18 10:15:00")),
   )
 
 # Create lagged price
@@ -301,6 +302,80 @@ stata_df <- data.frame(hour = price_df$hour,
 write.csv(stata_df, file = "Data/Stata_df.csv", row.names = F)
 
 rm(stata_df)
+
+
+# ------------------------------------------------------------------------------
+# Create STATA data set reduced
+# ------------------------------------------------------------------------------
+
+
+price_dfs <- price_df %>%
+  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+
+gen_dfs <- gen_df %>%
+  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+
+load_dfs <- load_df %>%
+  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+
+time_s <- time %>%
+  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+
+flow_dfs <- flow_df %>%
+  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+
+stata_dfs <- data.frame(hour = price_dfs$hour,
+                       day = price_dfs$day,
+                       solar = gen_dfs$Solar,
+                       wind = gen_dfs$Wind,
+                       load = load_dfs$Load,
+                       cable = price_dfs$cable,
+                       cable_pla = price_dfs$cable_pla,
+                       exp = flow_dfs$Exp,
+                       imp = flow_dfs$Imp,
+                       ime = flow_dfs$Ime,
+                       price = price_dfs$`Day-Ahead`,
+                       lag_p = price_dfs$lag_p,
+                       holiday = time_s$hol,
+                       mon = time_s$mon,
+                       tue = time_s$tue,
+                       wed = time_s$wed,
+                       thu = time_s$thu,
+                       fri = time_s$fri,
+                       sat = time_s$sat,
+                       sun = time_s$sun,
+                       jan = time_s$jan,
+                       feb = time_s$feb,
+                       mar = time_s$mar,
+                       apr = time_s$apr,
+                       may = time_s$may,
+                       jun = time_s$jun,
+                       jul = time_s$jul,
+                       aug = time_s$aug,
+                       sep = time_s$sep,
+                       oct = time_s$oct,
+                       nov = time_s$nov,
+                       dec = time_s$dec
+)
+
+write.csv(stata_dfs, file = "Data/Stata_dfs.csv", row.names = F)
+
+rm(stata_dfs)
+
+
+# ------------------------------------------------------------------------------
+# Clustering load
+# ------------------------------------------------------------------------------
+
+set.seed(2)
+
+load_df <- load_df %>%
+  group_by(month(DateTime)) %>%
+  mutate(base_lim = min(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
+         peak_lim = max(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
+         base = as.numeric(Load <= base_lim),
+         inter = as.numeric(Load <= peak_lim & Load > base_lim),
+         peak = as.numeric(!base & !inter))
 
 
 # ------------------------------------------------------------------------------
