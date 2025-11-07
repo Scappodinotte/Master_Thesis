@@ -67,6 +67,12 @@ load_24 <- read.csv("Data/Total Load - Day Ahead _ Actual_202401010000-202501010
 load_df <- rbind(load_23, load_24)
 rm(load_23, load_24)
 
+flow_23 <- read.csv("Data/Cross-Border Physical Flow_202301010000-202401010000.csv", header = T, sep = ",")
+flow_24 <- read.csv("Data/Cross-Border Physical Flow_202401010000-202501010000.csv", header = T, sep = ",")
+
+flow_df <- rbind(flow_23, flow_24)
+rm(flow_23, flow_24)
+
 price_22 <- read.csv("Data/GUI_ENERGY_PRICES_202212310000-202301010000.csv", header = T, sep = ",")
 price_23 <- read.csv("Data/GUI_ENERGY_PRICES_202301010000-202401010000.csv", header = T, sep = ",")
 price_24 <- read.csv("Data/GUI_ENERGY_PRICES_202401010000-202501010000.csv", header = T, sep = ",")
@@ -75,13 +81,14 @@ price_df <- rbind(price_22, price_23, price_24)
 rm(price_22, price_23, price_24)
 
 # Change time format
+flow_df$DateTime <- as.POSIXct(gen_df$DateTime, format = "%d.%m.%Y %H:%M", tz = "UTC")
 gen_df$DateTime <- as.POSIXct(gen_df$DateTime, format = "%d.%m.%Y %H:%M", tz = "UTC")
 load_df$DateTime <- as.POSIXct(load_df$DateTime, format = "%d.%m.%Y %H:%M", tz = "UTC")
 price_df$DateTime <- as.POSIXct(price_df$DateTime, format = "%d/%m/%Y %H:%M", tz = "UTC")
 
 
 # ------------------------------------------------------------------------------
-# Remove useless variables and december 2024
+# Remove useless variables
 # ------------------------------------------------------------------------------
 
 
@@ -101,6 +108,11 @@ price_df <- price_df %>%
   select(-c(MTU..UTC., Area, Sequence, Intraday.Period..UTC., Intraday.Price..EUR.MWh.))
 names(price_df) <- c("DateTime", "Day-Ahead")
 
+names(flow_df) <- c("UTC","DateTime", "Imp", "Exp")
+flow_df <- flow_df %>%
+  select(-(UTC)) %>%
+  mutate(Ime = Imp - Exp)
+
 
 # ------------------------------------------------------------------------------
 # Check NAs and treat them
@@ -111,6 +123,8 @@ which(gen_df$Solar == "N/A") #2023-03-26 21:00:00 - 2023-03-27 20:00:00
 which(gen_df$Wind == "N/A") #2023-03-26 21:00:00 - 2023-03-27 20:00:00
 which(load_df$Load == "N/A") #No NA
 which(price_df$`Day-Ahead` == "N/A") #No NA
+which(flow_df$Imp == "N/A") # No NA
+which(flow_df$Exp == "N/A") # No NA
 
 # Replace NAs with actual values
 act_df <- read.csv("Data/Actual_Gen_NA.csv", header = T, sep = ",")
@@ -172,7 +186,8 @@ price_df <- price_df %>%
     hour = hour(DateTime),
     day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1)),
     cable = 1 - as.numeric(between(DateTime, ymd_hms("2024-01-25 22:10:00"), ymd_hms("2024-09-04 00:00:00")) |
-                           between(DateTime, ymd_hms("2024-12-25 13:00:00"), ymd_hms("2024-12-31 23:00:00")))
+                           between(DateTime, ymd_hms("2024-12-25 13:00:00"), ymd_hms("2024-12-31 23:00:00"))),
+    pskov = 1 - as.numeric(DateTime >= ymd_hms("2024-07-18 10:15:00"))
   )
 
 # Create lagged price
@@ -255,6 +270,10 @@ stata_df <- data.frame(hour = price_df$hour,
                        wind = gen_df$Wind,
                        load = load_df$Load,
                        cable = price_df$cable,
+                       exp = flow_df$Exp,
+                       imp = flow_df$Imp,
+                       ime = flow_df$Ime,
+                       pskov = price_df$pskov,
                        price = price_df$`Day-Ahead`,
                        lag_p = price_df$lag_p,
                        holiday = time$hol,
@@ -292,7 +311,7 @@ rm(stata_df)
 g <- ggplot(gen_df, aes(x = DateTime, y = Solar)) + 
   geom_line() +
   labs(
-    title = "Hourly solar production [MW]",
+    title = "",
     y = "",
     x = ""
   ) +
@@ -305,7 +324,7 @@ ggsave(filename = "Solar.pdf", path = outDir, width = 7)
 g <- ggplot(gen_df, aes(x = DateTime, y = Wind)) + 
   geom_line() +
   labs(
-    title = "Hourly wind production [MW]",
+    title = "",
     y = "",
     x = ""
   ) +
@@ -318,7 +337,7 @@ ggsave(filename = "Wind.pdf", path = outDir, width = 7)
 g <- ggplot(load_df, aes(x = DateTime, y = Load)) + 
   geom_line() +
   labs(
-    title = "Hourly load [MW]",
+    title = "",
     y = "",
     x = ""
   ) +
@@ -331,7 +350,7 @@ ggsave(filename = "Load.pdf", path = outDir, width = 7)
 g <- ggplot(price_df, aes(x = DateTime, y = `Day-Ahead`)) + 
   geom_line() +
   labs(
-    title = "Hourly day-ahead price [EUR/MWh]",
+    title = "",
     y = "",
     x = ""
   ) +
@@ -563,7 +582,7 @@ t <- data.frame(c("Variable", "Solar", "Wind", "Load", "Price"),
                   round(load_drift$statistic, 2), round(price_drift$statistic, 2)),
                 c("p-value", "<0.01", "<0.01", "<0.01", "<0.01"),
                 c("", "", "", "", ""),
-                c("t-statistic", "-22.55", "-23.69", "-23.69" , "-23.69"),
+                c("t-statistic", "-22.67", "-23.69", "-23.69" , "-23.69"),
                 c("p-value", "<0.01", "<0.01", "<0.01", "<0.01")
 )
 
@@ -726,11 +745,6 @@ ggsave(filename = "price_distrib.pdf", path = outDir, width = 8)
 jarque.bera.test(price_df$`Day-Ahead`)
 # Reject normality
 
-# Discussion: In 2024, the prices seems to be lower and less variable on average during the solar dome than 2023
-# Especially from 16 to 18, the opposite happens, prices are higher on average and more disperse
-# Especially during the night, prices seems similar, but variability increase in 2024
-# In addition, the positive outliers are mostly registered in 2024
-
 
 # ------------------------------------------------------------------------------
 # Create latex table
@@ -762,23 +776,85 @@ print(xtable(t, type = "latex"))
 # ------------------------------------------------------------------------------
 
 
-g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = factor(cable))) +
+# Reduce 
+# Rename Cable variable
+price_df <- price_df %>%
+  mutate(
+    new_cable = if_else(
+      cable == 1,
+      "Operational",
+      "Out-of-service"
+    )
+  )
+
+# Price
+g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = factor(new_cable))) +
   geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
   labs(
     title = "Day-ahead price distribution across hours - before and after cable fault",
     subtitle = "In euro per megawatt-hour - y axis truncated for visibility purpose",
     x = "Hour",
     y = "Price",
-    fill = "Est-link 2 fault"
+    fill = "Estlink-2"
   ) + 
   ylim(-70, 600) +
-  coord_cartesian(clip = "off") +
   theme_minimal() + 
   theme(
     legend.position = c(0.9, 0.9),
     text = element_text(size = 14))
 g
 ggsave(filename = "price_distrib_hours.pdf", path = outDir, width = 9)
+
+# Wind
+g <- ggplot(price_df, aes(x = factor(hour), y = gen_df$Wind, fill = factor(new_cable))) +
+  geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
+  labs(
+    title = "Wind distribution across hours - before and after cable fault",
+    subtitle = "In megawatt",
+    x = "Hour",
+    y = "Wind Power",
+    fill = "Estlink-2"
+  ) + 
+  # ylim(-70, 600) +
+  theme_minimal() + 
+  theme(
+    legend.position = c(0.9, 0.9),
+    text = element_text(size = 14))
+g
+
+# Solar
+g <- ggplot(price_df, aes(x = factor(hour), y = gen_df$Solar, fill = factor(new_cable))) +
+  geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
+  labs(
+    title = "Solar distribution across hours - before and after cable fault",
+    subtitle = "In megawatt",
+    x = "Hour",
+    y = "Solar Power",
+    fill = "Estlink-2"
+  ) + 
+  # ylim(-70, 600) +
+  theme_minimal() + 
+  theme(
+    legend.position = c(0.9, 0.9),
+    text = element_text(size = 14))
+g
+
+# Cross-border flows
+g <- ggplot(price_df, aes(x = factor(hour), y = flow_df$Ime, fill = factor(new_cable))) +
+  geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
+  labs(
+    title = "Cross-border flows - before and after cable fault",
+    subtitle = "Inport - exports, in megawatt",
+    x = "Hour",
+    y = "Import - Export",
+    fill = "Estlink-2"
+  ) + 
+  # ylim(-70, 600) +
+  theme_minimal() + 
+  theme(
+    legend.position = c(0.9, 0.9),
+    text = element_text(size = 14))
+g
 
 
 # ------------------------------------------------------------------------------
