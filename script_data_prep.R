@@ -67,11 +67,18 @@ load_24 <- read.csv("Data/Total Load - Day Ahead _ Actual_202401010000-202501010
 load_df <- rbind(load_23, load_24)
 rm(load_23, load_24)
 
-flow_23 <- read.csv("Data/Cross-Border Physical Flow_202301010000-202401010000.csv", header = T, sep = ",")
-flow_24 <- read.csv("Data/Cross-Border Physical Flow_202401010000-202501010000.csv", header = T, sep = ",")
+flow_23_fi <- read.csv("Data/Cross-Border Physical Flow_202301010000-202401010000_fi.csv", header = T, sep = ",")
+flow_24_fi <- read.csv("Data/Cross-Border Physical Flow_202401010000-202501010000_fi.csv", header = T, sep = ",")
 
-flow_df <- rbind(flow_23, flow_24)
-rm(flow_23, flow_24)
+flow_fi_df <- rbind(flow_23_fi, flow_24_fi)
+
+flow_23_ru <- read.csv("Data/Cross-Border Physical Flow_202301010000-202401010000_ru.csv", header = T, sep = ",")
+flow_24_ru <- read.csv("Data/Cross-Border Physical Flow_202401010000-202501010000_ru.csv", header = T, sep = ",")
+
+flow_ru_df <- rbind(flow_23_ru, flow_24_ru)
+
+flow_df <- cbind(flow_fi_df, flow_ru_df)
+rm(flow_23_fi, flow_24_fi, flow_23_ru, flow_24_ru, flow_fi_df, flow_ru_df)
 
 price_22 <- read.csv("Data/GUI_ENERGY_PRICES_202212310000-202301010000.csv", header = T, sep = ",")
 price_23 <- read.csv("Data/GUI_ENERGY_PRICES_202301010000-202401010000.csv", header = T, sep = ",")
@@ -108,10 +115,11 @@ price_df <- price_df %>%
   select(-c(MTU..UTC., Area, Sequence, Intraday.Period..UTC., Intraday.Price..EUR.MWh.))
 names(price_df) <- c("DateTime", "Day-Ahead")
 
-names(flow_df) <- c("UTC","DateTime", "Imp", "Exp")
+names(flow_df) <- c("UTC","DateTime", "Imp_fi", "Exp_fi", "UTC","DateTime", "Imp_ru", "Exp_ru")
 flow_df <- flow_df %>%
-  select(-(UTC)) %>%
-  mutate(Ime = Imp - Exp)
+  select(-c(1, 5, 6)) %>%
+  mutate(Imp_ru = as.numeric(Imp_ru), Exp_ru = as.numeric(Exp_ru),
+    Ime_fi = Imp_fi - Exp_fi, Ime_ru = Imp_ru - Exp_ru)
 
 
 # ------------------------------------------------------------------------------
@@ -123,8 +131,10 @@ which(gen_df$Solar == "N/A") #2023-03-26 21:00:00 - 2023-03-27 20:00:00
 which(gen_df$Wind == "N/A") #2023-03-26 21:00:00 - 2023-03-27 20:00:00
 which(load_df$Load == "N/A") #No NA
 which(price_df$`Day-Ahead` == "N/A") #No NA
-which(flow_df$Imp == "N/A") # No NA
-which(flow_df$Exp == "N/A") # No NA
+which(is.na(flow_df$Imp_fi)) # No NA
+which(is.na(flow_df$Exp_fi)) # No NA
+which(is.na(flow_df$Imp_ru)) # No NA
+which(is.na(flow_df$Exp_ru)) # No NA
 
 # Replace NAs with actual values
 act_df <- read.csv("Data/Actual_Gen_NA.csv", header = T, sep = ",")
@@ -261,21 +271,42 @@ time <- time %>%
 
 
 # ------------------------------------------------------------------------------
+# Clustering load
+# ------------------------------------------------------------------------------
+
+set.seed(2)
+
+load_df <- load_df %>%
+  group_by(month(DateTime)) %>%
+  mutate(base_lim = min(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
+         peak_lim = max(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
+         base = as.numeric(Load <= base_lim),
+         inter = as.numeric(Load <= peak_lim & Load > base_lim),
+         peak = as.numeric(!base & !inter))
+
+
+# ------------------------------------------------------------------------------
 # Create STATA data set 
 # ------------------------------------------------------------------------------
 
 
 stata_df <- data.frame(hour = price_df$hour,
                        day = price_df$day,
+                       price = price_df$`Day-Ahead`,
                        solar = gen_df$Solar,
                        wind = gen_df$Wind,
                        load = load_df$Load,
                        cable = price_df$cable,
-                       exp = flow_df$Exp,
-                       imp = flow_df$Imp,
-                       ime = flow_df$Ime,
+                       exp_fi = flow_df$Exp_fi,
+                       imp_fi = flow_df$Imp_fi,
+                       ime_fi = flow_df$Ime_fi,
+                       exp_ru = flow_df$Exp_ru,
+                       imp_ru = flow_df$Imp_ru,
+                       ime_ru = flow_df$Ime_ru,
+                       base = load_df$base,
+                       inter = load_df$inter,
+                       peak = load_df$peak,
                        pskov = price_df$pskov,
-                       price = price_df$`Day-Ahead`,
                        lag_p = price_df$lag_p,
                        holiday = time$hol,
                        mon = time$mon,
@@ -326,15 +357,21 @@ flow_dfs <- flow_df %>%
 
 stata_dfs <- data.frame(hour = price_dfs$hour,
                        day = price_dfs$day,
+                       price = price_dfs$`Day-Ahead`,
                        solar = gen_dfs$Solar,
                        wind = gen_dfs$Wind,
                        load = load_dfs$Load,
                        cable = price_dfs$cable,
                        cable_pla = price_dfs$cable_pla,
-                       exp = flow_dfs$Exp,
-                       imp = flow_dfs$Imp,
-                       ime = flow_dfs$Ime,
-                       price = price_dfs$`Day-Ahead`,
+                       exp_fi = flow_dfs$Exp_fi,
+                       imp_fi = flow_dfs$Imp_fi,
+                       ime_fi = flow_dfs$Ime_fi,
+                       exp_ru = flow_dfs$Exp_ru,
+                       imp_ru = flow_dfs$Imp_ru,
+                       ime_ru = flow_dfs$Ime_ru,
+                       base = load_dfs$base,
+                       inter = load_dfs$inter,
+                       peak = load_dfs$peak,
                        lag_p = price_dfs$lag_p,
                        holiday = time_s$hol,
                        mon = time_s$mon,
@@ -361,21 +398,6 @@ stata_dfs <- data.frame(hour = price_dfs$hour,
 write.csv(stata_dfs, file = "Data/Stata_dfs.csv", row.names = F)
 
 rm(stata_dfs)
-
-
-# ------------------------------------------------------------------------------
-# Clustering load
-# ------------------------------------------------------------------------------
-
-set.seed(2)
-
-load_df <- load_df %>%
-  group_by(month(DateTime)) %>%
-  mutate(base_lim = min(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
-         peak_lim = max(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
-         base = as.numeric(Load <= base_lim),
-         inter = as.numeric(Load <= peak_lim & Load > base_lim),
-         peak = as.numeric(!base & !inter))
 
 
 # ------------------------------------------------------------------------------
@@ -853,7 +875,7 @@ print(xtable(t, type = "latex"))
 
 # Reduce 
 # Rename Cable variable
-price_df <- price_df %>%
+price_dfs <- price_df %>%
   mutate(
     new_cable = if_else(
       cable == 1,
@@ -863,7 +885,7 @@ price_df <- price_df %>%
   )
 
 # Price
-g <- ggplot(price_df, aes(x = factor(hour), y = `Day-Ahead`, fill = factor(new_cable))) +
+g <- ggplot(price_dfs, aes(x = factor(hour), y = `Day-Ahead`, fill = factor(new_cable))) +
   geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
   labs(
     title = "Day-ahead price distribution across hours - before and after cable fault",
