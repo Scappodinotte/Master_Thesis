@@ -115,11 +115,9 @@ price_df <- price_df %>%
   select(-c(MTU..UTC., Area, Sequence, Intraday.Period..UTC., Intraday.Price..EUR.MWh.))
 names(price_df) <- c("DateTime", "Day-Ahead")
 
-names(flow_df) <- c("UTC","DateTime", "Imp_fi", "Exp_fi", "UTC","DateTime", "Imp_ru", "Exp_ru")
+names(flow_df) <- c("UTC","DateTime", "Imp_fi", "Exp_fi", "Ime_fi", "UTC","DateTime", "Imp_ru", "Exp_ru", "Ime_ru", "Pskov")
 flow_df <- flow_df %>%
-  select(-c(1, 5, 6)) %>%
-  mutate(Imp_ru = as.numeric(Imp_ru), Exp_ru = as.numeric(Exp_ru),
-    Ime_fi = Imp_fi - Exp_fi, Ime_ru = Imp_ru - Exp_ru)
+  select(-c(1, 6, 7))
 
 
 # ------------------------------------------------------------------------------
@@ -195,10 +193,9 @@ price_df <- price_df %>%
   mutate(
     hour = hour(DateTime),
     day = floor(as.double(difftime(DateTime, init_date, units = "days") + 1)),
-    cable = 1 - as.numeric(between(DateTime, ymd_hms("2024-01-25 22:10:00"), ymd_hms("2024-09-04 00:00:00")) |
-                           between(DateTime, ymd_hms("2024-12-25 13:00:00"), ymd_hms("2024-12-31 23:00:00"))),
-    cable_pla = 1 - as.numeric(between(DateTime, ymd_hms("2023-08-01 00:00:00"), ymd_hms("2024-03-31 23:00:00"))),
-    pskov = 1 - as.numeric(DateTime >= ymd_hms("2024-07-18 10:15:00")),
+    cable = 1 - as.numeric(between(DateTime, ymd_hms("2024-01-25 23:00:00"), ymd_hms("2024-09-03 22:00:00")) |
+                           between(DateTime, ymd_hms("2024-12-25 11:00:00"), ymd_hms("2024-12-31 23:00:00"))),
+    ATC = if_else(cable == 1, 1000, 350),
   )
 
 # Create lagged price
@@ -276,13 +273,16 @@ time <- time %>%
 
 set.seed(2)
 
+
 load_df <- load_df %>%
   group_by(month(DateTime)) %>%
-  mutate(base_lim = min(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
-         peak_lim = max(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
-         base = as.numeric(Load <= base_lim),
-         inter = as.numeric(Load <= peak_lim & Load > base_lim),
-         peak = as.numeric(!base & !inter))
+  mutate(base_cen = sort(as.numeric(kmeans(Load, centers = 3, iter.max = 20, nstart = 25)$centers))[1],
+         inter_cen = sort(as.numeric(kmeans(Load, centers = 3, iter.max = 20, nstart = 25)$centers))[2],
+         peak_cen = sort(as.numeric(kmeans(Load, centers = 3, iter.max = 20, nstart = 25)$centers))[3],
+         base = as.numeric(abs(Load - base_cen) < abs(Load - inter_cen)),
+         inter = as.numeric(abs(Load - base_cen) >= abs(Load - inter_cen) & abs(Load - peak_cen) > abs(Load - inter_cen)),
+         peak = as.numeric(abs(Load - inter_cen) >= abs(Load - peak_cen)),
+         load_level = case_when(peak == 1 ~ "Peak", inter == 1 ~ "Inter", base == 1 ~ "Base"))
 
 
 # ------------------------------------------------------------------------------
@@ -297,16 +297,13 @@ stata_df <- data.frame(hour = price_df$hour,
                        wind = gen_df$Wind,
                        load = load_df$Load,
                        cable = price_df$cable,
-                       exp_fi = flow_df$Exp_fi,
-                       imp_fi = flow_df$Imp_fi,
                        ime_fi = flow_df$Ime_fi,
-                       exp_ru = flow_df$Exp_ru,
-                       imp_ru = flow_df$Imp_ru,
                        ime_ru = flow_df$Ime_ru,
+                       ATC = price_df$ATC,
                        base = load_df$base,
                        inter = load_df$inter,
                        peak = load_df$peak,
-                       pskov = price_df$pskov,
+                       pskov = flow_df$Pskov,
                        lag_p = price_df$lag_p,
                        holiday = time$hol,
                        mon = time$mon,
@@ -331,73 +328,6 @@ stata_df <- data.frame(hour = price_df$hour,
 )
 
 write.csv(stata_df, file = "Data/Stata_df.csv", row.names = F)
-
-rm(stata_df)
-
-
-# ------------------------------------------------------------------------------
-# Create STATA data set reduced
-# ------------------------------------------------------------------------------
-
-
-price_dfs <- price_df %>%
-  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
-
-gen_dfs <- gen_df %>%
-  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
-
-load_dfs <- load_df %>%
-  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
-
-time_s <- time %>%
-  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
-
-flow_dfs <- flow_df %>%
-  filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
-
-stata_dfs <- data.frame(hour = price_dfs$hour,
-                       day = price_dfs$day,
-                       price = price_dfs$`Day-Ahead`,
-                       solar = gen_dfs$Solar,
-                       wind = gen_dfs$Wind,
-                       load = load_dfs$Load,
-                       cable = price_dfs$cable,
-                       cable_pla = price_dfs$cable_pla,
-                       exp_fi = flow_dfs$Exp_fi,
-                       imp_fi = flow_dfs$Imp_fi,
-                       ime_fi = flow_dfs$Ime_fi,
-                       exp_ru = flow_dfs$Exp_ru,
-                       imp_ru = flow_dfs$Imp_ru,
-                       ime_ru = flow_dfs$Ime_ru,
-                       base = load_dfs$base,
-                       inter = load_dfs$inter,
-                       peak = load_dfs$peak,
-                       lag_p = price_dfs$lag_p,
-                       holiday = time_s$hol,
-                       mon = time_s$mon,
-                       tue = time_s$tue,
-                       wed = time_s$wed,
-                       thu = time_s$thu,
-                       fri = time_s$fri,
-                       sat = time_s$sat,
-                       sun = time_s$sun,
-                       jan = time_s$jan,
-                       feb = time_s$feb,
-                       mar = time_s$mar,
-                       apr = time_s$apr,
-                       may = time_s$may,
-                       jun = time_s$jun,
-                       jul = time_s$jul,
-                       aug = time_s$aug,
-                       sep = time_s$sep,
-                       oct = time_s$oct,
-                       nov = time_s$nov,
-                       dec = time_s$dec
-)
-
-write.csv(stata_dfs, file = "Data/Stata_dfs.csv", row.names = F)
-
-rm(stata_dfs)
 
 
 # ------------------------------------------------------------------------------
@@ -458,6 +388,25 @@ g <- ggplot(price_df, aes(x = DateTime, y = `Day-Ahead`)) +
 g
 ggsave(filename = "Price.pdf", path = outDir, width = 7)
 
+# Reduce time span to plot specfic periods
+start <- as.POSIXct("2024-07-01 00:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+end <- as.POSIXct("2024-07-31 23:00:00", format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+
+price_dfr <- price_df %>%
+  filter(DateTime >= start & DateTime <= end)
+
+g <- ggplot(price_dfr, aes(x = DateTime, y = `Day-Ahead`)) + 
+  geom_line() +
+  geom_vline(xintercept = ymd_hms("2024-07-18 10:00:00"), colour = "red") +
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
+  theme_minimal() +
+  theme(text = element_text(size = 16))
+g
+
 
 # ------------------------------------------------------------------------------
 # Check stationarity and seasonality
@@ -480,6 +429,11 @@ g1 <- coef_p[seq(2, 23),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g1
 
@@ -490,6 +444,11 @@ g2 <- coef_p[c(24, 25, 26, 27, 28, 29),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g2
 
@@ -500,11 +459,18 @@ g3 <- coef_p[seq(30, 40),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g3
 
-plot_grid(g1, plot_grid(g2, g3, ncol = 1, nrow = 2, align = "v"), ncol = 2, align = "v", hjust = 0)
-ggsave(filename = "seas_p.pdf", path = outDir, width = 6, height = 7)
+g <- grid.arrange(g1, g2, g3,
+             nrow = 2,
+             layout_matrix = cbind(1, c(2, 3)))
+ggsave(plot = g, filename = "seas_p.pdf", path = outDir, width = 6.5, height = 7.5)
 
 price_drift <- CADFtest(res_p, max.lag.y = 24, type = "drift")
 summary(price_drift)
@@ -531,6 +497,11 @@ g1 <- coef_s[seq(2, 23),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g1
 
@@ -541,6 +512,11 @@ g2 <- coef_s[c(24, 25, 26, 27, 28, 29),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g2
 
@@ -551,11 +527,18 @@ g3 <- coef_s[seq(30, 40),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g3
 
-plot_grid(g1, plot_grid(g2, g3, ncol = 1, nrow = 2, align = "v"), ncol = 2, align = "v", hjust = -0.01)
-ggsave(filename = "seas_s.pdf", path = outDir, width = 6, height = 7)
+g <- grid.arrange(g1, g2, g3,
+                  nrow = 2,
+                  layout_matrix = cbind(1, c(2, 3)))
+ggsave(plot = g, filename = "seas_s.pdf", path = outDir, width = 6.5, height = 7.5)
 
 sol_drift <- CADFtest(res_s, max.lag.y = 24, type = "drift")
 summary(sol_drift)
@@ -582,6 +565,11 @@ g1 <- coef_w[seq(2, 23),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g1
 
@@ -592,6 +580,11 @@ g2 <- coef_w[c(24, 25, 26, 27, 28, 29),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g2
 
@@ -602,11 +595,18 @@ g3 <- coef_w[seq(30, 40),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g3
 
-plot_grid(g1, plot_grid(g2, g3, ncol = 1, nrow = 2, align = "v"), ncol = 2, align = "v", hjust = -0.01)
-ggsave(filename = "seas_w.pdf", path = outDir, width = 6, height = 7)
+g <- grid.arrange(g1, g2, g3,
+                  nrow = 2,
+                  layout_matrix = cbind(1, c(2, 3)))
+ggsave(plot = g, filename = "seas_w.pdf", path = outDir, width = 6.5, height = 7.5)
 
 wind_drift <- CADFtest(res_w, max.lag.y = 24, type = "drift")
 summary(wind_drift)
@@ -633,6 +633,11 @@ g1 <- coef_l[seq(2, 23),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g1
 
@@ -642,7 +647,12 @@ g2 <- coef_l[c(24, 25, 26, 27, 28, 29),] %>%
   geom_pointrange(aes(ymin = estimate - 2 * std.error,
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
-  geom_hline(aes(yintercept = 0), colour = "red") + 
+  geom_hline(aes(yintercept = 0), colour = "red") +
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g2
 
@@ -653,11 +663,19 @@ g3 <- coef_l[seq(30, 40),] %>%
                       ymax = estimate + 2 * std.error)) + 
   coord_flip() + 
   geom_hline(aes(yintercept = 0), colour = "red") + 
+  labs(
+    title = "",
+    y = "",
+    x = ""
+  ) +
   theme_minimal()
 g3
 
-plot_grid(g1, plot_grid(g2, g3, ncol = 1, nrow = 2, align = "v"), ncol = 2, align = "v", hjust = -0.01)
-ggsave(filename = "seas_l.pdf", path = outDir, width = 6, height = 7)
+g <- grid.arrange(g1, g2, g3,
+                  nrow = 2,
+                  layout_matrix = cbind(1, c(2, 3)))
+ggsave(plot = g, filename = "seas_l.pdf", path = outDir, width = 6.5, height = 7.5)
+
 
 load_drift <- CADFtest(res_l, max.lag.y = 24, type = "drift")
 summary(load_drift)
@@ -936,15 +954,15 @@ g <- ggplot(price_df, aes(x = factor(hour), y = gen_df$Solar, fill = factor(new_
     text = element_text(size = 14))
 g
 
-# Cross-border flows
-g <- ggplot(price_df, aes(x = factor(hour), y = flow_df$Ime, fill = factor(new_cable))) +
+# Price vs load levels
+g <- ggplot(stata_df, aes(x = factor(hour), y = price, fill = factor(load_lev))) +
   geom_boxplot(alpha = 0.6, position = position_dodge(width = 1)) +
   labs(
-    title = "Cross-border flows - before and after cable fault",
-    subtitle = "Inport - exports, in megawatt",
+    title = "Day-ahead price distribution across hours - coditional to load levels",
+    subtitle = "In euro per megawatt-hour - y axis truncated for visibility purpose",
     x = "Hour",
-    y = "Import - Export",
-    fill = "Estlink-2"
+    y = "Price",
+    fill = "Load-level"
   ) + 
   # ylim(-70, 600) +
   theme_minimal() + 
@@ -1081,3 +1099,73 @@ g
 #     # day = day(DateTime),
 #     # day = as.numeric(floor(as.double(difftime(DateTime, init_date, units = "days") + 1)))
 #   )
+
+# # ------------------------------------------------------------------------------
+# # Create STATA data set reduced
+# # ------------------------------------------------------------------------------
+# 
+# 
+# price_dfs <- price_df %>%
+#   filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+# 
+# gen_dfs <- gen_df %>%
+#   filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+# 
+# load_dfs <- load_df %>%
+#   filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+# 
+# time_s <- time %>%
+#   filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+# 
+# flow_dfs <- flow_df %>%
+#   filter(DateTime < ymd_hms("2024-07-18 00:00:00"))
+# 
+# stata_dfs <- data.frame(hour = price_dfs$hour,
+#                         day = price_dfs$day,
+#                         price = price_dfs$`Day-Ahead`,
+#                         solar = gen_dfs$Solar,
+#                         wind = gen_dfs$Wind,
+#                         load = load_dfs$Load,
+#                         cable = price_dfs$cable,
+#                         cable_pla = price_dfs$cable_pla,
+#                         exp_fi = flow_dfs$Exp_fi,
+#                         imp_fi = flow_dfs$Imp_fi,
+#                         ime_fi = flow_dfs$Ime_fi,
+#                         exp_ru = flow_dfs$Exp_ru,
+#                         imp_ru = flow_dfs$Imp_ru,
+#                         ime_ru = flow_dfs$Ime_ru,
+#                         base = load_dfs$base,
+#                         inter = load_dfs$inter,
+#                         peak = load_dfs$peak,
+#                         lag_p = price_dfs$lag_p,
+#                         holiday = time_s$hol,
+#                         mon = time_s$mon,
+#                         tue = time_s$tue,
+#                         wed = time_s$wed,
+#                         thu = time_s$thu,
+#                         fri = time_s$fri,
+#                         sat = time_s$sat,
+#                         sun = time_s$sun,
+#                         jan = time_s$jan,
+#                         feb = time_s$feb,
+#                         mar = time_s$mar,
+#                         apr = time_s$apr,
+#                         may = time_s$may,
+#                         jun = time_s$jun,
+#                         jul = time_s$jul,
+#                         aug = time_s$aug,
+#                         sep = time_s$sep,
+#                         oct = time_s$oct,
+#                         nov = time_s$nov,
+#                         dec = time_s$dec
+# )
+# 
+# write.csv(stata_dfs, file = "Data/Stata_dfs.csv", row.names = F)
+# 
+# rm(stata_dfs)
+
+# mutate(base_lim = min(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
+#        peak_lim = max(as.numeric(kmeans(Load, centers = 2, iter.max = 20, nstart = 25)$centers)),
+#        base = as.numeric(Load <= base_lim),
+#        inter = as.numeric(Load <= peak_lim & Load > base_lim),
+#        peak = as.numeric(!base & !inter))
